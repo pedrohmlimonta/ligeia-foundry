@@ -106,9 +106,9 @@
   ],
   "primaryTokenAttribute": "resources.hp",
   "secondaryTokenAttribute": "resources.mp",
-  "url": "https://github.com/pedrohmlimonta/ligeia-foundry",
-  "manifest": "https://github.com/pedrohmlimonta/ligeia-foundry/releases/latest/download/system.json",
-  "download": "https://github.com/pedrohmlimonta/ligeia-foundry/releases/download/v0.1.0/ligeia-rpg.zip",
-  "bugs": "https://github.com/pedrohmlimonta/ligeia-foundry/issues",
-  "readme": "https://github.com/pedrohmlimonta/ligeia-foundry/blob/main/README.md"
+  "url": "https://github.com/pedrohmlimonta/LigeiaFoundry",
+  "manifest": "https://github.com/pedrohmlimonta/LigeiaFoundry/releases/latest/download/system.json",
+  "download": "https://github.com/pedrohmlimonta/LigeiaFoundry/releases/download/v0.1.0/ligeia-rpg.zip",
+  "bugs": "https://github.com/pedrohmlimonta/LigeiaFoundry/issues",
+  "readme": "https://github.com/pedrohmlimonta/LigeiaFoundry/blob/main/README.md"
 }

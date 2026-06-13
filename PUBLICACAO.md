@@ -12,7 +12,7 @@ git init
 git add .
 git commit -m "Sistema Ligeia RPG para Foundry V13"
 git branch -M main
-git remote add origin https://github.com/pedrohmlimonta/ligeia-foundry.git
+git remote add origin https://github.com/pedrohmlimonta/LigeiaFoundry.git
 git push -u origin main
 ```
 > Importante: o repositório precisa se chamar **ligeia-foundry** e o usuário
@@ -34,7 +34,7 @@ git push -u origin main
 1. Foundry → **Game Systems → Install System**.
 2. No campo **Manifest URL**, cole:
    ```
-   https://github.com/pedrohmlimonta/ligeia-foundry/releases/latest/download/system.json
+   https://github.com/pedrohmlimonta/LigeiaFoundry/releases/latest/download/system.json
    ```
 3. Clique em **Install**. O Foundry baixa o zip da release e instala.
 4. Crie um Mundo usando o sistema **Ligeia RPG**.
