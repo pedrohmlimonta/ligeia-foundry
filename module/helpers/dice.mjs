@@ -10,6 +10,8 @@
  *  - Falha crítica: os 2 dados que entram na soma são ambos "1".
  */
 
+import { conditionModifiers } from "./conditions.mjs";
+
 /**
  * Executa uma rolagem do Ligeia e devolve um objeto Roll do Foundry
  * já avaliado, mais metadados de crítico.
@@ -29,10 +31,14 @@ export async function rollLigeia({
   bonus = 0,
   difficulty = null,
 } = {}) {
-  const totalDice = 2 + Math.max(0, improvement);
-  // keep highest 2 (kh2). Mantém os 2 maiores; descarta o resto.
+  // Dados de melhoria: positivo = vantagem (mantém os 2 MAIORES);
+  // negativo = desvantagem (rola os mesmos dados extras e mantém os 2
+  // MENORES). Ex.: -1D → 3d6kl2. Sempre ao menos 2d6.
+  const extra = Math.abs(improvement || 0);
+  const totalDice = 2 + extra;
+  const keepMode = (improvement || 0) < 0 ? "kl2" : "kh2";
   const flat = (attribute || 0) + (bonus || 0);
-  const formulaParts = [`${totalDice}d6kh2`];
+  const formulaParts = [`${totalDice}d6${keepMode}`];
   if (flat !== 0) formulaParts.push(`${flat >= 0 ? "+" : "-"} ${Math.abs(flat)}`);
   const formula = formulaParts.join(" ");
 
@@ -246,7 +252,7 @@ export async function applyConditionsToActor(actor, ids = []) {
  * personagem (self/area/aura com includeSelf). `acertou` indica se a defesa
  * falhou (ou se não houve defesa, em self/auto).
  */
-async function resolveHitOnActor(action, tActor, { damageRoll, atkTotal, defTotal, acertou, cfg }) {
+async function resolveHitOnActor(action, tActor, { damageRoll, atkTotal, defTotal, acertou, cfg, attackerMods }) {
   let dmgText = "";
   let condText = "";
   const dmgTypeLabel = action.damageType ? (cfg.damageTypes?.[action.damageType] || action.damageType) : "";
@@ -260,10 +266,27 @@ async function resolveHitOnActor(action, tActor, { damageRoll, atkTotal, defTota
     const resource = action.damageResource || "hp";
     const isHp = resource === "hp";
     const rd = isHp ? damageReductionFor(tActor, action.damageType || "") : 0;
-    const dealt = Math.max(0, damageRoll.total + scaling - rd);
+
+    // Multiplicadores de condição:
+    //  - Enfraquecido (atacante): causa metade do dano
+    //  - Intangível (alvo): recebe metade do dano
+    const targetMods = conditionModifiers(tActor);
+    const dealtMult = (attackerMods?.damageDealtMult ?? 1);
+    const takenMult = targetMods.damageTakenMult;
+
+    // raw → aplica enfraquecido → subtrai RD → aplica intangível
+    let amount = (damageRoll.total + scaling) * dealtMult;
+    amount = amount - rd;
+    amount = amount * takenMult;
+    const dealt = Math.max(0, Math.floor(amount));
+
     const scaleNote = scaling ? ` <span class="lig-scale">(+${scaling} escalonado)</span>` : "";
     const typeNote = isHp && dmgTypeLabel ? " " + dmgTypeLabel : "";
     const rdNote = rd ? ` <span class="lig-rd">(RD ${rd})</span>` : "";
+    const multBits = [];
+    if (dealtMult !== 1) multBits.push("½ Enfraquecido");
+    if (takenMult !== 1) multBits.push("½ Intangível");
+    const multNote = multBits.length ? ` <span class="lig-cond-note">(${multBits.join(", ")})</span>` : "";
     const resWord = { hp: "Dano", mp: "Mana drenada", heroic: "Heroico drenado" }[resource];
 
     const applied = await applyDamageToActor(tActor, dealt, resource);
@@ -276,7 +299,7 @@ async function resolveHitOnActor(action, tActor, { damageRoll, atkTotal, defTota
     } else if (applied.noPermission) {
       applyNote = `<div class="lig-dmg-applied muted">Sem permissão para alterar a ficha do alvo (peça ao Mestre).</div>`;
     }
-    dmgText = `<div class="lig-atk-dmg">${resWord}: <strong>${dealt}</strong>${typeNote}${scaleNote}${rdNote}</div>${applyNote}`;
+    dmgText = `<div class="lig-atk-dmg">${resWord}: <strong>${dealt}</strong>${typeNote}${scaleNote}${rdNote}${multNote}</div>${applyNote}`;
   }
 
   if (acertou && (action.appliesConditions || []).length) {
@@ -355,12 +378,15 @@ export async function rollItemAction({ actor, item, action, hidden = false, over
   const costText = await spendActionCosts(actor, action);
 
   // Rolagem de ataque (se a ação rola)
+  // Modificadores de condição do ATACANTE
+  const atkCond = conditionModifiers(actor);
+
   let atkRoll = null;
   if (action.canRoll) {
     const atk = resolveAttr(actor, atkKey);
     atkRoll = await rollLigeia({
       attribute: atk.value,
-      improvement: atk.dice + (Number(action.rollDice) || 0),
+      improvement: atk.dice + (Number(action.rollDice) || 0) + atkCond.atkDice,
       bonus: Number(action.rollBonus) || 0,
       difficulty: null,
     });
@@ -368,6 +394,7 @@ export async function rollItemAction({ actor, item, action, hidden = false, over
   }
   const atkLabel = (cfg.attackAttrs?.[atkKey]) || atkKey;
   const atkTotal = atkRoll ? atkRoll.total : 0;
+  const atkCondNote = atkCond.atkDice ? ` <span class="lig-cond-note">(${atkCond.atkDice}D por condição)</span>` : "";
 
   // Rola dano (uma vez; aplicado a cada alvo afetado)
   let damageRoll = null;
@@ -427,27 +454,54 @@ export async function rollItemAction({ actor, item, action, hidden = false, over
       let defInfo = "";
 
       if (needsDefense) {
-        const defKey1 = action.defenseAttr || "esquiva";
-        const cand = [resolveAttr(tActor, defKey1)];
-        if (action.defenseAttr2 && action.defenseAttr2 !== defKey1) {
-          cand.push(resolveAttr(tActor, action.defenseAttr2));
+        const defCond = conditionModifiers(tActor);
+
+        // Monta as defesas candidatas; Indefeso não pode usar Bloqueio.
+        let keys = [action.defenseAttr || "esquiva"];
+        if (action.defenseAttr2 && action.defenseAttr2 !== keys[0]) keys.push(action.defenseAttr2);
+        if (defCond.blockDisabled) {
+          const filtered = keys.filter((k) => k !== "bloqueio");
+          keys = filtered.length ? filtered : ["esquiva"]; // só tinha bloqueio → vira esquiva
         }
-        let def = cand[0];
-        for (let i = 1; i < cand.length; i++) if (cand[i].value > def.value) def = cand[i];
-        const chooseNote = cand.length > 1
-          ? ` <span class="lig-def-choice">(melhor de ${cand.map((c) => cfg.defenseAttrs?.[c.key] || c.key).join(" / ")})</span>`
+
+        // Resolve cada candidata aplicando o modificador de Esquiva (-3 se
+        // Indefeso) ao VALOR, e escolhe a de maior valor efetivo.
+        const cands = keys.map((k) => {
+          const r = resolveAttr(tActor, k);
+          const penalty = k === "esquiva" ? defCond.esquivaMod : 0;
+          return { key: k, base: r.value, dice: r.dice, penalty, eff: r.value + penalty };
+        });
+        let def = cands[0];
+        for (let i = 1; i < cands.length; i++) if (cands[i].eff > def.eff) def = cands[i];
+
+        const chooseNote = cands.length > 1
+          ? ` <span class="lig-def-choice">(melhor de ${cands.map((c) => cfg.defenseAttrs?.[c.key] || c.key).join(" / ")})</span>`
           : "";
-        const defRoll = await rollLigeia({ attribute: def.value, improvement: def.dice, bonus: 0, difficulty: atkTotal });
+
+        const defRoll = await rollLigeia({
+          attribute: def.base,
+          improvement: def.dice + defCond.defDice,
+          bonus: def.penalty,
+          difficulty: atkTotal,
+        });
         rolls.push(defRoll.roll);
         defTotal = defRoll.total;
         acertou = defRoll.total < atkTotal;
         const defLabel = (cfg.defenseAttrs?.[def.key]) || def.key;
-        defInfo = ` — defesa ${defLabel}${chooseNote}: ${defRoll.total} ${acertou ? '<span class="lig-outcome ok">Acertou!</span>' : '<span class="lig-outcome ko">Defendeu</span>'}`;
+        // Notas de condição na defesa
+        const condBits = [];
+        if (def.penalty) condBits.push(`${def.penalty} Esquiva (Indefeso)`);
+        if (defCond.defDice) condBits.push(`${defCond.defDice}D`);
+        if (defCond.blockDisabled && (action.defenseAttr === "bloqueio" || action.defenseAttr2 === "bloqueio")) {
+          condBits.push("sem Bloqueio");
+        }
+        const condNote = condBits.length ? ` <span class="lig-cond-note">(${condBits.join(", ")})</span>` : "";
+        defInfo = ` — defesa ${defLabel}${chooseNote}: ${defRoll.total}${condNote} ${acertou ? '<span class="lig-outcome ok">Acertou!</span>' : '<span class="lig-outcome ko">Defendeu</span>'}`;
       } else {
         defInfo = isSelf ? ' <span class="lig-outcome self">(em si)</span>' : ' <span class="lig-outcome ok">(automático)</span>';
       }
 
-      const detail = await resolveHitOnActor(action, tActor, { damageRoll, atkTotal, defTotal, acertou, cfg });
+      const detail = await resolveHitOnActor(action, tActor, { damageRoll, atkTotal, defTotal, acertou, cfg, attackerMods: atkCond });
       lines.push(`<div class="lig-atk-target"><div class="lig-atk-line"><strong>${tActor.name}</strong>${defInfo}</div>${detail}</div>`);
     }
   } else if (mode === "target") {
@@ -462,7 +516,7 @@ export async function rollItemAction({ actor, item, action, hidden = false, over
 
   // ---- Monta a mensagem ----
   const atkHeader = atkRoll
-    ? `<span class="lig-atk-attr">${atkLabel} → ${atkRoll.total}</span>
+    ? `<span class="lig-atk-attr">${atkLabel} → ${atkRoll.total}${atkCondNote}</span>
        ${atkRoll.isCritSuccess ? '<span class="ligeia-crit success">✦ Crítico ✦</span>' : ""}
        ${atkRoll.isCritFail ? '<span class="ligeia-crit fail">✗ Falha Crítica ✗</span>' : ""}`
     : "";

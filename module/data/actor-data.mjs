@@ -1,6 +1,8 @@
 /**
  * DataModels dos Actors do sistema Ligeia.
  */
+import { expandConditions } from "../helpers/conditions.mjs";
+
 const fields = foundry.data.fields;
 
 /* Atributo primário: valor + dados de melhoria */
@@ -110,6 +112,14 @@ export class PersonagemData extends foundry.abstract.TypeDataModel {
         (this.secondaryBonus.deslocamento || 0),
     };
 
+    // Lento (ou condições que implicam Lento, como Caído/Exausto): metade do
+    // deslocamento, arredondado para baixo.
+    const condSet = expandConditions(this.conditions || []);
+    if (condSet.has("lento")) {
+      this.secondary.deslocamento = Math.floor(this.secondary.deslocamento / 2);
+      this.secondary.slowed = true;
+    }
+
     // ---- Máximos de recursos ----
     // PV = Vigor + bônus vocação + nível
     const hpMax = a.vigor.value + (this.resources.hp.bonus || 0) + lvl;
@@ -178,6 +188,11 @@ export class NpcData extends foundry.abstract.TypeDataModel {
       iniciativaDice: Math.max(a.agilidade.dice, a.percepcao.dice),
       deslocamento: a.agilidade.value,
     };
+    const npcCond = expandConditions(this.conditions || []);
+    if (npcCond.has("lento")) {
+      this.secondary.deslocamento = Math.floor(this.secondary.deslocamento / 2);
+      this.secondary.slowed = true;
+    }
     const hpMax = a.vigor.value + (this.resources.hp.bonus || 0) + lvl;
     const mpMax = a.mente.value + (this.resources.mp.bonus || 0) + lvl;
     const heroicMax = lvl + (this.resources.heroic.bonus || 0);
