@@ -1,7 +1,7 @@
 /**
  * Ficha de Personagem do Ligeia — Foundry V13 (ApplicationV2).
  */
-import { rollLigeia, postRollToChat, rollItemAction } from "../helpers/dice.mjs";
+import { rollLigeia, postRollToChat, rollItemAction, resolveAttr } from "../helpers/dice.mjs";
 import { placeTemplateForAction } from "../helpers/template.mjs";
 import { computeXpSpent } from "../helpers/xp.mjs";
 import { effectIsActive } from "../helpers/effects.mjs";
@@ -23,6 +23,11 @@ export class LigeiaCharacterSheet extends HandlebarsApplicationMixin(ActorSheetV
       itemToggle: LigeiaCharacterSheet.#onItemToggle,
       effectToggle: LigeiaCharacterSheet.#onEffectToggle,
       conditionToggle: LigeiaCharacterSheet.#onConditionToggle,
+      addAppliedEffect: LigeiaCharacterSheet.#onAddAppliedEffect,
+      removeAppliedEffect: LigeiaCharacterSheet.#onRemoveAppliedEffect,
+      toggleAppliedEffect: LigeiaCharacterSheet.#onToggleAppliedEffect,
+      tickAppliedEffect: LigeiaCharacterSheet.#onTickAppliedEffect,
+      rollEndEffect: LigeiaCharacterSheet.#onRollEndEffect,
       itemRoll: LigeiaCharacterSheet.#onItemRoll,
       editImage: LigeiaCharacterSheet.#onEditImage,
       itemCreate: LigeiaCharacterSheet.#onItemCreate,
@@ -40,6 +45,52 @@ export class LigeiaCharacterSheet extends HandlebarsApplicationMixin(ActorSheetV
       template: "systems/ligeia-rpg/templates/actor/personagem.hbs",
     },
   };
+
+  // Evita corrida: durante add/remove programático de appliedEffects, não
+  // reconstrói o array a partir do form.
+  #fxOpInProgress = false;
+
+  /**
+   * Reconstrói system.appliedEffects (array) a partir do form e protege-o
+   * contra ser apagado quando uma operação programática está em curso.
+   */
+  _prepareSubmitData(event, form, formData, updateData) {
+    let submitData;
+    try {
+      submitData = super._prepareSubmitData(event, form, formData, updateData);
+    } catch (e) {
+      submitData = foundry.utils.expandObject(formData?.object ?? {});
+    }
+    if (!submitData || typeof submitData !== "object") {
+      submitData = foundry.utils.expandObject(formData?.object ?? {});
+    }
+    const sys = submitData.system;
+    if (sys && typeof sys === "object") {
+      if (this.#fxOpInProgress) {
+        delete sys.appliedEffects;
+        return submitData;
+      }
+      const hasFx = form?.querySelector?.('[name^="system.appliedEffects."]');
+      if (hasFx) {
+        if (sys.appliedEffects && !Array.isArray(sys.appliedEffects) && typeof sys.appliedEffects === "object") {
+          sys.appliedEffects = Object.keys(sys.appliedEffects)
+            .sort((a, b) => Number(a) - Number(b))
+            .map((k) => sys.appliedEffects[k]);
+        }
+        if (Array.isArray(sys.appliedEffects)) {
+          sys.appliedEffects = sys.appliedEffects.filter((v) => v !== undefined && v !== null);
+          for (const ae of sys.appliedEffects) {
+            if (ae && ae.effects && !Array.isArray(ae.effects) && typeof ae.effects === "object") {
+              ae.effects = Object.keys(ae.effects).sort((a, b) => Number(a) - Number(b)).map((k) => ae.effects[k]);
+            }
+          }
+        }
+      } else {
+        delete sys.appliedEffects;
+      }
+    }
+    return submitData;
+  }
 
   /** @override */
   async _prepareContext(options) {
@@ -100,6 +151,21 @@ export class LigeiaCharacterSheet extends HandlebarsApplicationMixin(ActorSheetV
       active: activeConds.includes(id),
     }));
     context.activeConditionCount = activeConds.length;
+
+    // Efeitos aplicados na ficha (buffs/debuffs), enriquecidos para exibição.
+    const fxTypeLabels = { dice: "Dados", bonus: "Bônus", stat: "Atributo", set: "Define", damage: "Dano", rd: "Red. Dano", info: "Info" };
+    context.appliedEffects = (sys.appliedEffects || []).map((ae, idx) => ({
+      ...ae,
+      index: idx,
+      summary: (ae.effects || [])
+        .map((e) => {
+          const sign = (Number(e.value) || 0) >= 0 ? "+" : "";
+          const kind = e.type === "dice" ? "D" : "";
+          return `${fxTypeLabels[e.type] || e.type} ${sign}${e.value}${kind} ${e.target || ""}`.trim();
+        })
+        .join(", "),
+      hasDuration: (ae.duration?.rounds || 0) > 0,
+    }));
 
     // Anota em cada efeito de cada item se ele está ativo agora (considerando
     // modo do item, enabled e — para habilidades — o nível adquirido vs.
@@ -324,6 +390,103 @@ export class LigeiaCharacterSheet extends HandlebarsApplicationMixin(ActorSheetV
     await this.document.update({ "system.conditions": next });
   }
 
+  /** Adiciona um efeito em branco à ficha (buff/debuff manual). */
+  static async #onAddAppliedEffect() {
+    const arr = foundry.utils.deepClone(this.document.system.appliedEffects || []);
+    arr.push({
+      label: "Novo efeito",
+      icon: "icons/svg/aura.svg",
+      effects: [{ type: "bonus", target: "all", value: 1, label: "", enabled: true }],
+      disabled: false,
+      duration: { rounds: 0, remaining: 0 },
+      endRoll: { enabled: false, attr: "mente", dc: 0 },
+      source: "",
+    });
+    this.#fxOpInProgress = true;
+      try { await this.document.update({ "system.appliedEffects": arr }); }
+      finally { this.#fxOpInProgress = false; }
+  }
+
+  static async #onRemoveAppliedEffect(event, target) {
+    const idx = Number(target.dataset.index);
+    const arr = foundry.utils.deepClone(this.document.system.appliedEffects || []);
+    arr.splice(idx, 1);
+    this.#fxOpInProgress = true;
+      try { await this.document.update({ "system.appliedEffects": arr }); }
+      finally { this.#fxOpInProgress = false; }
+  }
+
+  static async #onToggleAppliedEffect(event, target) {
+    const idx = Number(target.dataset.index);
+    const arr = foundry.utils.deepClone(this.document.system.appliedEffects || []);
+    if (!arr[idx]) return;
+    arr[idx].disabled = !arr[idx].disabled;
+    this.#fxOpInProgress = true;
+      try { await this.document.update({ "system.appliedEffects": arr }); }
+      finally { this.#fxOpInProgress = false; }
+  }
+
+  /** Passa uma rodada: decrementa a duração; remove ao chegar a zero. */
+  static async #onTickAppliedEffect(event, target) {
+    const idx = Number(target.dataset.index);
+    const arr = foundry.utils.deepClone(this.document.system.appliedEffects || []);
+    const ae = arr[idx];
+    if (!ae) return;
+    const rounds = ae.duration?.rounds || 0;
+    if (rounds <= 0) {
+      ui.notifications?.info(`"${ae.label}" não tem duração definida.`);
+      return;
+    }
+    ae.duration.remaining = Math.max(0, (ae.duration.remaining ?? rounds) - 1);
+    if (ae.duration.remaining <= 0) {
+      arr.splice(idx, 1);
+      this.#fxOpInProgress = true;
+      try { await this.document.update({ "system.appliedEffects": arr }); }
+      finally { this.#fxOpInProgress = false; }
+      ChatMessage.create({
+        speaker: ChatMessage.getSpeaker({ actor: this.document }),
+        content: `<div class="ligeia-roll-flavor"><strong>${this.document.name}</strong>: o efeito <em>${ae.label}</em> terminou.</div>`,
+      });
+    } else {
+      this.#fxOpInProgress = true;
+      try { await this.document.update({ "system.appliedEffects": arr }); }
+      finally { this.#fxOpInProgress = false; }
+    }
+  }
+
+  /** Rola para tentar encerrar um efeito (sucesso ≥ CD remove o efeito). */
+  static async #onRollEndEffect(event, target) {
+    const idx = Number(target.dataset.index);
+    const arr = foundry.utils.deepClone(this.document.system.appliedEffects || []);
+    const ae = arr[idx];
+    if (!ae || !ae.endRoll?.enabled) return;
+    const attrKey = ae.endRoll.attr || "mente";
+    const r = resolveAttr(this.document, attrKey);
+    const rm = this.document.system?.rollMods || {};
+    const dc = ae.endRoll.dc || 0;
+    const result = await rollLigeia({
+      attribute: r.value,
+      improvement: r.dice + (rm.all?.dice || 0),
+      bonus: rm.all?.bonus || 0,
+      difficulty: dc,
+    });
+    const success = result.total >= dc;
+    const label = (CONFIG.LIGEIA?.attackAttrs?.[attrKey]) || attrKey;
+    const note = success ? `<span class="lig-outcome ok">Encerrou!</span>` : `<span class="lig-outcome ko">Persiste</span>`;
+    await ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor: this.document }),
+      flavor: `<div class="ligeia-roll-flavor"><strong>${this.document.name}</strong> — encerrar <em>${ae.label}</em> (${label} vs CD ${dc}): ${result.total} ${note}</div>`,
+      rolls: [result.roll],
+      sound: CONFIG.sounds.dice,
+    });
+    if (success) {
+      arr.splice(idx, 1);
+      this.#fxOpInProgress = true;
+      try { await this.document.update({ "system.appliedEffects": arr }); }
+      finally { this.#fxOpInProgress = false; }
+    }
+  }
+
   static async #onItemToggle(event, target) {
     const id = target.closest("[data-item-id]")?.dataset.itemId;
     const item = this.document.items.get(id);
@@ -382,10 +545,11 @@ export class LigeiaCharacterSheet extends HandlebarsApplicationMixin(ActorSheetV
       percepcao: "Percepção",
     };
 
+    const rm = actor.system?.rollMods || {};
     const result = await rollLigeia({
       attribute: attr.value,
-      improvement: attr.dice,
-      bonus: 0,
+      improvement: attr.dice + (rm.all?.dice || 0),
+      bonus: rm.all?.bonus || 0,
     });
 
     await postRollToChat({
@@ -410,18 +574,13 @@ export class LigeiaCharacterSheet extends HandlebarsApplicationMixin(ActorSheetV
       iniciativa: "Iniciativa",
     };
 
-    // Dados de melhoria: iniciativa tem os seus; os demais herdam do atributo base
-    let value = sec[key] || 0;
-    let dice = 0;
-    if (key === "iniciativa") dice = sec.iniciativaDice || 0;
-    else if (key === "bloqueio") dice = actor.system.attributes.forca.dice;
-    else if (key === "esquiva") dice = actor.system.attributes.agilidade.dice;
-    else if (key === "conjuracao") dice = actor.system.attributes.mente.dice;
-
+    // Usa o resolvedor central (já considera dados de efeitos nos secundários)
+    const r = resolveAttr(actor, key);
+    const rm = actor.system?.rollMods || {};
     const result = await rollLigeia({
-      attribute: value,
-      improvement: dice,
-      bonus: 0,
+      attribute: r.value,
+      improvement: r.dice + (rm.all?.dice || 0),
+      bonus: rm.all?.bonus || 0,
     });
 
     await postRollToChat({

@@ -72,3 +72,76 @@ export function collectActorEffects(actor) {
   }
   return out;
 }
+
+/* ======================================================================== */
+/*  Agregação e aplicação de modificadores                                  */
+/* ======================================================================== */
+
+// Atributos primários e secundários reconhecidos como alvo de efeitos.
+const PRIMARY_ATTRS = ["forca", "agilidade", "vigor", "mente", "percepcao"];
+const SECONDARY_ATTRS = ["bloqueio", "esquiva", "conjuracao", "iniciativa"];
+// Alvos de rolagem que não são um atributo específico.
+const ROLL_CATEGORIES = ["all", "attack", "defense"];
+// Recursos/derivados que aceitam +N via efeito "stat".
+const STAT_TARGETS = ["hp", "mp", "heroic", "deslocamento"];
+
+/**
+ * Estrutura zerada de modificadores.
+ */
+function emptyMods() {
+  const attr = {};
+  for (const k of [...PRIMARY_ATTRS, ...SECONDARY_ATTRS]) attr[k] = { bonus: 0, dice: 0 };
+  const roll = {};
+  for (const k of ROLL_CATEGORIES) roll[k] = { bonus: 0, dice: 0 };
+  const stat = {};
+  for (const k of STAT_TARGETS) stat[k] = 0;
+  return { attr, roll, stat };
+}
+
+/**
+ * Aplica um único efeito (já ativo) à estrutura de modificadores.
+ *  - bonus: +valor ao destino (atributo, categoria de rolagem)
+ *  - dice:  +valor de dados de melhoria ao destino
+ *  - stat:  +valor a um recurso/derivado (hp/mp/heroic/deslocamento)
+ */
+function applyEffectToMods(mods, effect) {
+  const t = effect.target || "all";
+  const v = Number(effect.value) || 0;
+  if (!v && effect.type !== "set") return;
+
+  if (effect.type === "bonus") {
+    if (mods.attr[t]) mods.attr[t].bonus += v;
+    else if (mods.roll[t]) mods.roll[t].bonus += v;
+  } else if (effect.type === "dice") {
+    if (mods.attr[t]) mods.attr[t].dice += v;
+    else if (mods.roll[t]) mods.roll[t].dice += v;
+  } else if (effect.type === "stat") {
+    if (t in mods.stat) mods.stat[t] += v;
+  }
+  // "set", "damage", "rd", "info" não entram aqui (tratados em outros lugares)
+}
+
+/**
+ * Agrega todos os modificadores ativos de um ator (itens + efeitos aplicados
+ * diretamente na ficha) numa estrutura somada por destino.
+ * @returns {{attr, roll, stat}}
+ */
+export function aggregateEffectModifiers(actor) {
+  const mods = emptyMods();
+
+  // Efeitos vindos dos itens
+  for (const { effect } of collectActorEffects(actor)) {
+    applyEffectToMods(mods, effect);
+  }
+
+  // Efeitos aplicados diretamente na ficha (buffs/debuffs com duração)
+  for (const ae of actor.system?.appliedEffects || []) {
+    if (ae.disabled) continue;
+    for (const effect of ae.effects || []) {
+      if (effect.enabled === false) continue;
+      applyEffectToMods(mods, effect);
+    }
+  }
+
+  return mods;
+}

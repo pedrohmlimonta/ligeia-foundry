@@ -2,8 +2,42 @@
  * DataModels dos Actors do sistema Ligeia.
  */
 import { expandConditions } from "../helpers/conditions.mjs";
+import { aggregateEffectModifiers } from "../helpers/effects.mjs";
+import { effectField } from "./fields.mjs";
 
 const fields = foundry.data.fields;
+
+/**
+ * Campo para os efeitos aplicados diretamente em um ator (buffs/debuffs de
+ * magias, encantamentos, etc.). Cada entrada tem:
+ *  - label/icon: identificação
+ *  - effects: lista de modificadores (mesma estrutura dos itens)
+ *  - disabled: liga/desliga sem remover
+ *  - duration: { rounds, remaining } em rodadas (0 = sem limite)
+ *  - endRoll: { enabled, attr, dc } — rolagem por rodada para encerrar
+ *  - source: nome de quem aplicou
+ */
+function appliedEffectsField() {
+  return new fields.ArrayField(
+    new fields.SchemaField({
+      label: new fields.StringField({ blank: true, initial: "Efeito" }),
+      icon: new fields.StringField({ blank: true, initial: "icons/svg/aura.svg" }),
+      effects: effectField(),
+      disabled: new fields.BooleanField({ initial: false }),
+      duration: new fields.SchemaField({
+        rounds: new fields.NumberField({ initial: 0, integer: true, min: 0 }),
+        remaining: new fields.NumberField({ initial: 0, integer: true, min: 0 }),
+      }),
+      endRoll: new fields.SchemaField({
+        enabled: new fields.BooleanField({ initial: false }),
+        attr: new fields.StringField({ blank: true, initial: "mente" }),
+        dc: new fields.NumberField({ initial: 0, integer: true, min: 0 }),
+      }),
+      source: new fields.StringField({ blank: true, initial: "" }),
+    }),
+    { initial: [] },
+  );
+}
 
 /* Atributo primário: valor + dados de melhoria */
 function attrField(initial = 2) {
@@ -46,6 +80,10 @@ export class PersonagemData extends foundry.abstract.TypeDataModel {
 
       // Condições ativas (lista de ids; ver CONFIG.LIGEIA.conditions)
       conditions: new fields.ArrayField(new fields.StringField({ blank: false }), { initial: [] }),
+
+      // Efeitos aplicados diretamente na ficha (buffs/debuffs de magias,
+      // encantamentos, etc.), com duração opcional e rolagem para encerrar.
+      appliedEffects: appliedEffectsField(),
 
       // Atributos primários
       attributes: new fields.SchemaField({
@@ -97,6 +135,21 @@ export class PersonagemData extends foundry.abstract.TypeDataModel {
     const a = this.attributes;
     const lvl = this.details.level || 1;
 
+    // ---- Modificadores de efeitos ativos (itens + buffs na ficha) ----
+    // Aplica bônus/dados aos ATRIBUTOS PRIMÁRIOS primeiro, para que os
+    // secundários derivados (bloqueio=força, esquiva=agilidade, etc.) já
+    // reflitam os efeitos. Guarda também os modificadores de categorias de
+    // rolagem (all/attack/defense) em this.rollMods, para uso nas rolagens.
+    const mods = aggregateEffectModifiers(this.parent);
+    this.rollMods = mods.roll;
+    this.effectMods = mods; // exposto para depuração/uso externo
+    for (const k of ["forca", "agilidade", "vigor", "mente", "percepcao"]) {
+      if (a[k]) {
+        a[k].value = (a[k].value || 0) + (mods.attr[k]?.bonus || 0);
+        a[k].dice = (a[k].dice || 0) + (mods.attr[k]?.dice || 0);
+      }
+    }
+
     // ---- Atributos secundários ----
     this.secondary = {
       bloqueio: a.forca.value,
@@ -112,6 +165,21 @@ export class PersonagemData extends foundry.abstract.TypeDataModel {
         (this.secondaryBonus.deslocamento || 0),
     };
 
+    // Aplica bônus/dados de efeitos aos SECUNDÁRIOS (esquiva, bloqueio,
+    // conjuração, iniciativa) por cima do valor derivado.
+    this.secondary.bloqueio += mods.attr.bloqueio?.bonus || 0;
+    this.secondary.esquiva += mods.attr.esquiva?.bonus || 0;
+    this.secondary.conjuracao += mods.attr.conjuracao?.bonus || 0;
+    this.secondary.iniciativa += mods.attr.iniciativa?.bonus || 0;
+    this.secondary.iniciativaDice += mods.attr.iniciativa?.dice || 0;
+    // Dados extras de bloqueio/esquiva/conjuração (herdam do primário, mas o
+    // efeito pode adicionar) — guardados para o resolveAttr usar.
+    this.secondary.bloqueioDice = (a.forca.dice || 0) + (mods.attr.bloqueio?.dice || 0);
+    this.secondary.esquivaDice = (a.agilidade.dice || 0) + (mods.attr.esquiva?.dice || 0);
+    this.secondary.conjuracaoDice = (a.mente.dice || 0) + (mods.attr.conjuracao?.dice || 0);
+    // Deslocamento via efeito "stat"
+    this.secondary.deslocamento += mods.stat.deslocamento || 0;
+
     // Lento (ou condições que implicam Lento, como Caído/Exausto): metade do
     // deslocamento, arredondado para baixo.
     const condSet = expandConditions(this.conditions || []);
@@ -121,12 +189,12 @@ export class PersonagemData extends foundry.abstract.TypeDataModel {
     }
 
     // ---- Máximos de recursos ----
-    // PV = Vigor + bônus vocação + nível
-    const hpMax = a.vigor.value + (this.resources.hp.bonus || 0) + lvl;
-    // PM = Mente + bônus vocação + nível
-    const mpMax = a.mente.value + (this.resources.mp.bonus || 0) + lvl;
-    // PH = nível
-    const heroicMax = lvl + (this.resources.heroic.bonus || 0);
+    // PV = Vigor + bônus vocação + nível (+ efeito stat hp)
+    const hpMax = a.vigor.value + (this.resources.hp.bonus || 0) + lvl + (mods.stat.hp || 0);
+    // PM = Mente + bônus vocação + nível (+ efeito stat mp)
+    const mpMax = a.mente.value + (this.resources.mp.bonus || 0) + lvl + (mods.stat.mp || 0);
+    // PH = nível (+ efeito stat heroic)
+    const heroicMax = lvl + (this.resources.heroic.bonus || 0) + (mods.stat.heroic || 0);
 
     this.resources.hp.max = hpMax;
     this.resources.mp.max = mpMax;
@@ -152,6 +220,7 @@ export class NpcData extends foundry.abstract.TypeDataModel {
         notes: new fields.HTMLField({ blank: true, initial: "" }),
       }),
       conditions: new fields.ArrayField(new fields.StringField({ blank: false }), { initial: [] }),
+      appliedEffects: appliedEffectsField(),
       attributes: new fields.SchemaField({
         forca: attrField(2),
         agilidade: attrField(2),
@@ -180,6 +249,17 @@ export class NpcData extends foundry.abstract.TypeDataModel {
   prepareDerivedData() {
     const a = this.attributes;
     const lvl = this.details.level || 1;
+
+    // Modificadores de efeitos ativos (itens + buffs na ficha)
+    const mods = aggregateEffectModifiers(this.parent);
+    this.rollMods = mods.roll;
+    for (const k of ["forca", "agilidade", "vigor", "mente", "percepcao"]) {
+      if (a[k]) {
+        a[k].value = (a[k].value || 0) + (mods.attr[k]?.bonus || 0);
+        a[k].dice = (a[k].dice || 0) + (mods.attr[k]?.dice || 0);
+      }
+    }
+
     this.secondary = {
       bloqueio: a.forca.value,
       esquiva: a.agilidade.value,
@@ -188,14 +268,24 @@ export class NpcData extends foundry.abstract.TypeDataModel {
       iniciativaDice: Math.max(a.agilidade.dice, a.percepcao.dice),
       deslocamento: a.agilidade.value,
     };
+    this.secondary.bloqueio += mods.attr.bloqueio?.bonus || 0;
+    this.secondary.esquiva += mods.attr.esquiva?.bonus || 0;
+    this.secondary.conjuracao += mods.attr.conjuracao?.bonus || 0;
+    this.secondary.iniciativa += mods.attr.iniciativa?.bonus || 0;
+    this.secondary.iniciativaDice += mods.attr.iniciativa?.dice || 0;
+    this.secondary.bloqueioDice = (a.forca.dice || 0) + (mods.attr.bloqueio?.dice || 0);
+    this.secondary.esquivaDice = (a.agilidade.dice || 0) + (mods.attr.esquiva?.dice || 0);
+    this.secondary.conjuracaoDice = (a.mente.dice || 0) + (mods.attr.conjuracao?.dice || 0);
+    this.secondary.deslocamento += mods.stat.deslocamento || 0;
+
     const npcCond = expandConditions(this.conditions || []);
     if (npcCond.has("lento")) {
       this.secondary.deslocamento = Math.floor(this.secondary.deslocamento / 2);
       this.secondary.slowed = true;
     }
-    const hpMax = a.vigor.value + (this.resources.hp.bonus || 0) + lvl;
-    const mpMax = a.mente.value + (this.resources.mp.bonus || 0) + lvl;
-    const heroicMax = lvl + (this.resources.heroic.bonus || 0);
+    const hpMax = a.vigor.value + (this.resources.hp.bonus || 0) + lvl + (mods.stat.hp || 0);
+    const mpMax = a.mente.value + (this.resources.mp.bonus || 0) + lvl + (mods.stat.mp || 0);
+    const heroicMax = lvl + (this.resources.heroic.bonus || 0) + (mods.stat.heroic || 0);
     this.resources.hp.max = hpMax;
     this.resources.mp.max = mpMax;
     this.resources.heroic.max = heroicMax;

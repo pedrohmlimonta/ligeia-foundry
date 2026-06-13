@@ -134,6 +134,63 @@
     </div>
   </section>
 
+  {{!-- ===== Efeitos aplicados (buffs/debuffs) ===== --}}
+  <section class="lig-applied-fx">
+    <div class="lig-section-title">
+      Efeitos ativos
+      <button type="button" class="lig-mini-btn" data-action="addAppliedEffect">+ efeito</button>
+    </div>
+    {{#each appliedEffects as |ae|}}
+    <div class="lig-applied-item {{#if ae.disabled}}off{{/if}}">
+      <div class="lig-applied-head">
+        <img src="{{ae.icon}}" alt="" class="lig-applied-icon"/>
+        <input type="text" name="system.appliedEffects.{{ae.index}}.label" value="{{ae.label}}" class="lig-applied-label" placeholder="Nome do efeito"/>
+        <button type="button" class="lig-mini-btn" data-action="toggleAppliedEffect" data-index="{{ae.index}}" title="Ligar/desligar">{{#if ae.disabled}}○{{else}}●{{/if}}</button>
+        {{#if ae.hasDuration}}
+        <button type="button" class="lig-mini-btn" data-action="tickAppliedEffect" data-index="{{ae.index}}" title="Passar 1 rodada">⏱ {{ae.duration.remaining}}</button>
+        {{/if}}
+        {{#if ae.endRoll.enabled}}
+        <button type="button" class="lig-mini-btn" data-action="rollEndEffect" data-index="{{ae.index}}" title="Rolar para encerrar">🎲</button>
+        {{/if}}
+        <button type="button" class="lig-mini-btn danger" data-action="removeAppliedEffect" data-index="{{ae.index}}" title="Remover">✕</button>
+      </div>
+      {{#if ae.summary}}<div class="lig-applied-summary">{{ae.summary}}</div>{{/if}}
+      <div class="lig-applied-config">
+        <label>Tipo
+          <select name="system.appliedEffects.{{ae.index}}.effects.0.type">
+            <option value="bonus" {{#if (eq ae.effects.0.type "bonus")}}selected{{/if}}>Bônus</option>
+            <option value="dice" {{#if (eq ae.effects.0.type "dice")}}selected{{/if}}>Dados</option>
+            <option value="stat" {{#if (eq ae.effects.0.type "stat")}}selected{{/if}}>Atributo/Recurso</option>
+          </select>
+        </label>
+        <label>Alvo
+          <input type="text" name="system.appliedEffects.{{ae.index}}.effects.0.target" value="{{ae.effects.0.target}}" placeholder="forca, esquiva, all, attack, hp…"/>
+        </label>
+        <label>Valor
+          <input type="number" name="system.appliedEffects.{{ae.index}}.effects.0.value" value="{{ae.effects.0.value}}"/>
+        </label>
+        <label>Duração (rodadas)
+          <input type="number" name="system.appliedEffects.{{ae.index}}.duration.rounds" value="{{ae.duration.rounds}}" min="0"/>
+        </label>
+      </div>
+      <div class="lig-applied-config">
+        <label class="lig-inline-check">
+          <input type="checkbox" name="system.appliedEffects.{{ae.index}}.endRoll.enabled" {{checked ae.endRoll.enabled}}/>
+          Rolagem p/ encerrar
+        </label>
+        {{#if ae.endRoll.enabled}}
+        <label>Atributo
+          <input type="text" name="system.appliedEffects.{{ae.index}}.endRoll.attr" value="{{ae.endRoll.attr}}"/>
+        </label>
+        <label>CD
+          <input type="number" name="system.appliedEffects.{{ae.index}}.endRoll.dc" value="{{ae.endRoll.dc}}" min="0"/>
+        </label>
+        {{/if}}
+      </div>
+    </div>
+    {{else}}<div class="lig-empty">Nenhum efeito ativo.</div>{{/each}}
+  </section>
+
   {{!-- ===== Atributos primários ===== --}}
   <section class="lig-attributes">
     {{#each system.attributes as |attr key|}}

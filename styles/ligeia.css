@@ -1253,3 +1253,26 @@
 }
 .lig-portrait-wrap:hover .lig-token-img-btn { opacity: 1; }
 .lig-token-img-btn:hover { border-color: var(--lig-gold, #c9a84a); background: rgba(40,32,18,0.95); }
+
+/* =========================================================================
+   Efeitos aplicados na ficha (buffs/debuffs)
+   ========================================================================= */
+.lig-applied-fx { margin: 0.4rem 0; }
+.lig-applied-item {
+  border: 1px solid var(--lig-border, #5a4a2a);
+  border-radius: 4px; padding: 0.4rem; margin-bottom: 0.4rem;
+  background: var(--lig-bg-deep, #15110a);
+}
+.lig-applied-item.off { opacity: 0.5; }
+.lig-applied-head { display: flex; align-items: center; gap: 0.3rem; }
+.lig-applied-icon { width: 18px; height: 18px; }
+.lig-applied-label { flex: 1; font-weight: 600; }
+.lig-applied-summary {
+  font-size: 0.75rem; color: var(--lig-gold, #c9a84a);
+  margin: 0.2rem 0; font-style: italic;
+}
+.lig-applied-config {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+  gap: 0.3rem; margin-top: 0.3rem;
+}
+.lig-applied-config label { font-size: 0.72rem; }

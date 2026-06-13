@@ -147,12 +147,12 @@ export function resolveAttr(actor, key) {
   const sec = sys.secondary || {};
   if (key in sec) {
     const value = sec[key] || 0;
-    // Iniciativa herda dados de melhoria; os demais secundários herdam do
-    // atributo-base correspondente.
+    // Os dados de melhoria dos secundários já vêm calculados em
+    // prepareDerivedData (herdam do primário + efeitos). Fallback ao primário.
     const diceMap = {
-      bloqueio: sys.attributes?.forca?.dice || 0,
-      esquiva: sys.attributes?.agilidade?.dice || 0,
-      conjuracao: sys.attributes?.mente?.dice || 0,
+      bloqueio: sec.bloqueioDice ?? sys.attributes?.forca?.dice ?? 0,
+      esquiva: sec.esquivaDice ?? sys.attributes?.agilidade?.dice ?? 0,
+      conjuracao: sec.conjuracaoDice ?? sys.attributes?.mente?.dice ?? 0,
       iniciativa: sec.iniciativaDice || 0,
     };
     return { value, dice: diceMap[key] || 0, key };
@@ -384,10 +384,14 @@ export async function rollItemAction({ actor, item, action, hidden = false, over
   let atkRoll = null;
   if (action.canRoll) {
     const atk = resolveAttr(actor, atkKey);
+    // Modificadores de categoria de rolagem do atacante (all + attack)
+    const rm = actor.system?.rollMods || {};
+    const rmDice = (rm.all?.dice || 0) + (rm.attack?.dice || 0);
+    const rmBonus = (rm.all?.bonus || 0) + (rm.attack?.bonus || 0);
     atkRoll = await rollLigeia({
       attribute: atk.value,
-      improvement: atk.dice + (Number(action.rollDice) || 0) + atkCond.atkDice,
-      bonus: Number(action.rollBonus) || 0,
+      improvement: atk.dice + (Number(action.rollDice) || 0) + atkCond.atkDice + rmDice,
+      bonus: (Number(action.rollBonus) || 0) + rmBonus,
       difficulty: null,
     });
     rolls.push(atkRoll.roll);
@@ -480,8 +484,8 @@ export async function rollItemAction({ actor, item, action, hidden = false, over
 
         const defRoll = await rollLigeia({
           attribute: def.base,
-          improvement: def.dice + defCond.defDice,
-          bonus: def.penalty,
+          improvement: def.dice + defCond.defDice + (tActor.system?.rollMods?.all?.dice || 0) + (tActor.system?.rollMods?.defense?.dice || 0),
+          bonus: def.penalty + (tActor.system?.rollMods?.all?.bonus || 0) + (tActor.system?.rollMods?.defense?.bonus || 0),
           difficulty: atkTotal,
         });
         rolls.push(defRoll.roll);
