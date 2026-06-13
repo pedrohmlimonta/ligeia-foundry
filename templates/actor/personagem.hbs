@@ -2,8 +2,16 @@
 
   {{!-- ===== Cabeçalho ===== --}}
   <header class="lig-header">
-    <img class="lig-portrait" src="{{actor.img}}" data-edit="img"
-         alt="Retrato" {{#unless editable}}title="Retrato"{{/unless}}/>
+    <div class="lig-portrait-wrap">
+      <img class="lig-portrait" src="{{actor.img}}"
+           data-action="editImage" data-target="img"
+           alt="Retrato" title="Clique para trocar o retrato"/>
+      {{#if editable}}
+      <button type="button" class="lig-token-img-btn"
+              data-action="editImage" data-target="prototypeToken.texture.src"
+              title="Trocar a imagem do token">⛀ token</button>
+      {{/if}}
+    </div>
     <div class="lig-identity">
       <input type="text" name="name" value="{{actor.name}}"
              class="lig-charname" placeholder="Nome do personagem"/>

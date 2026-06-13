@@ -1239,3 +1239,17 @@
 .lig-cond-note {
   font-size: 0.72rem; color: #d8a0d8; font-style: italic;
 }
+
+/* Retrato + botão de imagem do token */
+.lig-portrait-wrap { position: relative; display: inline-block; }
+.lig-portrait { cursor: pointer; }
+.lig-portrait:hover { outline: 2px solid var(--lig-gold, #c9a84a); }
+.lig-token-img-btn {
+  position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%);
+  font-size: 0.62rem; padding: 1px 6px; white-space: nowrap;
+  background: rgba(20,16,10,0.85); color: var(--lig-gold, #c9a84a);
+  border: 1px solid var(--lig-gold-dark, #6a5224); border-radius: 8px;
+  cursor: pointer; opacity: 0; transition: opacity 0.15s;
+}
+.lig-portrait-wrap:hover .lig-token-img-btn { opacity: 1; }
+.lig-token-img-btn:hover { border-color: var(--lig-gold, #c9a84a); background: rgba(40,32,18,0.95); }

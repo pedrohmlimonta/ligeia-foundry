@@ -24,6 +24,7 @@ export class LigeiaCharacterSheet extends HandlebarsApplicationMixin(ActorSheetV
       effectToggle: LigeiaCharacterSheet.#onEffectToggle,
       conditionToggle: LigeiaCharacterSheet.#onConditionToggle,
       itemRoll: LigeiaCharacterSheet.#onItemRoll,
+      editImage: LigeiaCharacterSheet.#onEditImage,
       itemCreate: LigeiaCharacterSheet.#onItemCreate,
     },
     form: {
@@ -270,6 +271,27 @@ export class LigeiaCharacterSheet extends HandlebarsApplicationMixin(ActorSheetV
    * traço): rola o atributo de ataque e, se configurado, resolve a defesa
    * do(s) alvo(s) e o dano.
    */
+  /**
+   * Abre o seletor de arquivos para trocar uma imagem do ator. O alvo é
+   * indicado por data-target: "img" (retrato da ficha) ou
+   * "prototypeToken.texture.src" (imagem padrão do token).
+   */
+  static async #onEditImage(event, target) {
+    const attr = target.dataset.target || "img";
+    const current = foundry.utils.getProperty(this.document, attr);
+    const defaultArtwork = this.document.constructor.getDefaultArtwork?.(this.document.toObject()) || {};
+    const fallback = attr === "img" ? defaultArtwork.img : defaultArtwork.texture?.src;
+    const FP = foundry.applications.apps.FilePicker?.implementation || FilePicker;
+    const fp = new FP({
+      type: "image",
+      current: current ?? fallback,
+      callback: (path) => this.document.update({ [attr]: path }),
+      top: (this.position.top ?? 0) + 40,
+      left: (this.position.left ?? 0) + 10,
+    });
+    return fp.browse();
+  }
+
   static async #onItemRoll(event, target) {
     const id = target.closest("[data-item-id]")?.dataset.itemId;
     const item = this.document.items.get(id);
