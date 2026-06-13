@@ -51,6 +51,17 @@ class LigeiaItemSheetBase extends HandlebarsApplicationMixin(ItemSheetV2) {
     }
     const sys = submitData.system;
     if (sys && typeof sys === "object") {
+      // Durante uma adição/remoção programática (_appendToArray/_removeFromArray),
+      // NÃO reconstrói os arrays a partir do form: o update já traz o array
+      // correto e o form ainda reflete o estado antigo. Reconstruir aqui
+      // sobrescreveria a operação (causava o bug de "não cria ação ao reabrir").
+      if (this.#arrayOpInProgress) {
+        for (const key of ["actions", "effects", "costs", "metamagics", "skillList", "grantedTraits"]) {
+          delete sys[key];
+        }
+        return submitData;
+      }
+
       // ----- Reconstrói o array system.actions a partir do form -----
       // Descobre quantas ações existem contando os campos .label.
       const actionLabels = form?.querySelectorAll?.('[name^="system.actions."][name$=".label"]');
@@ -64,16 +75,18 @@ class LigeiaItemSheetBase extends HandlebarsApplicationMixin(ItemSheetV2) {
         } else if (Array.isArray(sys.actions)) {
           arr = sys.actions;
         }
-        // Coleta as condições (checkboxes) por índice de ação.
+        // Remove buracos ANTES de mexer (evita arr[i] undefined).
+        arr = arr.filter((v) => v !== undefined && v !== null);
+        // Coleta as condições (checkboxes) por índice de ação a partir do form.
         for (let i = 0; i < arr.length; i++) {
           const boxes = form.querySelectorAll(`input[name="system.actions.${i}.appliesConditions"]`);
           if (boxes && boxes.length) {
             arr[i].appliesConditions = Array.from(boxes).filter((b) => b.checked).map((b) => b.value);
-          } else if (arr[i]) {
+          } else {
             arr[i].appliesConditions = arr[i].appliesConditions || [];
           }
         }
-        sys.actions = arr.filter((v) => v !== undefined && v !== null);
+        sys.actions = arr;
       } else {
         // Form sem nenhum campo de ação → preserva o documento.
         delete sys.actions;
@@ -254,6 +267,10 @@ class LigeiaItemSheetBase extends HandlebarsApplicationMixin(ItemSheetV2) {
 
   #savedScroll = 0;
   #delegationBound = false;
+  // Quando true, o próximo _prepareSubmitData NÃO reconstrói os arrays a
+  // partir do form (evita corrida que sobrescreve uma adição/remoção
+  // programática feita por _appendToArray/_removeFromArray).
+  #arrayOpInProgress = false;
 
   _onRender(context, options) {
     super._onRender?.(context, options);
@@ -330,10 +347,13 @@ class LigeiaItemSheetBase extends HandlebarsApplicationMixin(ItemSheetV2) {
       const current = foundry.utils.getProperty(this.document.system, sysPath);
       const arr = Array.isArray(current) ? foundry.utils.deepClone(current) : [];
       arr.push(entry);
+      this.#arrayOpInProgress = true;
       await this.document.update({ [path]: arr });
     } catch (err) {
       console.error(`Ligeia | ERRO ao adicionar em ${path}:`, err);
       ui.notifications?.error(`Ligeia: falha ao adicionar (${path}). Veja o console.`);
+    } finally {
+      this.#arrayOpInProgress = false;
     }
   }
   async _removeFromArray(path, index) {
@@ -342,10 +362,13 @@ class LigeiaItemSheetBase extends HandlebarsApplicationMixin(ItemSheetV2) {
       const current = foundry.utils.getProperty(this.document.system, sysPath);
       const arr = Array.isArray(current) ? foundry.utils.deepClone(current) : [];
       arr.splice(index, 1);
+      this.#arrayOpInProgress = true;
       await this.document.update({ [path]: arr });
     } catch (err) {
       console.error(`Ligeia | ERRO ao remover de ${path}:`, err);
       ui.notifications?.error(`Ligeia: falha ao remover (${path}). Veja o console.`);
+    } finally {
+      this.#arrayOpInProgress = false;
     }
   }
 
