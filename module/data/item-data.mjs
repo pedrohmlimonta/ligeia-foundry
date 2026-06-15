@@ -2,7 +2,7 @@
  * DataModels dos Items do sistema Ligeia.
  * Foundry V13 — foundry.abstract.TypeDataModel
  */
-import { activatableFields, effectField, costField, actionsField, migrateFlatActionToArray } from "./fields.mjs";
+import { activatableFields, effectField, costField, actionsField, migrateFlatActionToArray, migrateEffectTargets } from "./fields.mjs";
 
 const fields = foundry.data.fields;
 
@@ -52,7 +52,7 @@ export class HabilidadeData extends foundry.abstract.TypeDataModel {
     };
   }
   static migrateData(source) {
-    return migrateFlatActionToArray(super.migrateData(source));
+    return migrateFlatActionToArray(migrateEffectTargets(super.migrateData(source)));
   }
 }
 
@@ -88,7 +88,7 @@ export class MagiaData extends foundry.abstract.TypeDataModel {
     };
   }
   static migrateData(source) {
-    return migrateFlatActionToArray(super.migrateData(source));
+    return migrateFlatActionToArray(migrateEffectTargets(super.migrateData(source)));
   }
 }
 
@@ -111,7 +111,7 @@ export class EquipamentoData extends foundry.abstract.TypeDataModel {
     };
   }
   static migrateData(source) {
-    return migrateFlatActionToArray(super.migrateData(source));
+    return migrateFlatActionToArray(migrateEffectTargets(super.migrateData(source)));
   }
 }
 
@@ -131,7 +131,7 @@ export class TracoData extends foundry.abstract.TypeDataModel {
     };
   }
   static migrateData(source) {
-    return migrateFlatActionToArray(super.migrateData(source));
+    return migrateFlatActionToArray(migrateEffectTargets(super.migrateData(source)));
   }
 }
 

@@ -4,6 +4,7 @@
 import { expandConditions } from "../helpers/conditions.mjs";
 import { aggregateEffectModifiers } from "../helpers/effects.mjs";
 import { effectField } from "./fields.mjs";
+import { migrateEffectTargets } from "./fields.mjs";
 
 const fields = foundry.data.fields;
 
@@ -60,6 +61,9 @@ function resourceField() {
 /*  PERSONAGEM                                                         */
 /* ================================================================== */
 export class PersonagemData extends foundry.abstract.TypeDataModel {
+  static migrateData(source) {
+    return migrateEffectTargets(super.migrateData(source));
+  }
   static defineSchema() {
     return {
       // Identidade
@@ -212,6 +216,9 @@ export class PersonagemData extends foundry.abstract.TypeDataModel {
 /*  NPC (mesma base, simplificado)                                     */
 /* ================================================================== */
 export class NpcData extends foundry.abstract.TypeDataModel {
+  static migrateData(source) {
+    return migrateEffectTargets(super.migrateData(source));
+  }
   static defineSchema() {
     return {
       details: new fields.SchemaField({

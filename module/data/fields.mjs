@@ -136,6 +136,35 @@ export function actionsField() {
 }
 
 /**
+ * MIGRAÇÃO: corrige nomes de alvo de efeito que mudaram (inglês/antigos →
+ * português/atuais), para que os modificadores voltem a ser reconhecidos.
+ */
+const EFFECT_TARGET_RENAMES = {
+  initiative: "iniciativa",
+  max_hp: "hp",
+  max_mp: "mp",
+  max_heroic: "heroic",
+  defense: "defense", // mantém (categoria geral)
+};
+export function migrateEffectTargets(source) {
+  if (!source || typeof source !== "object") return source;
+  const fix = (list) => {
+    if (!Array.isArray(list)) return;
+    for (const e of list) {
+      if (e && e.target && EFFECT_TARGET_RENAMES[e.target]) {
+        e.target = EFFECT_TARGET_RENAMES[e.target];
+      }
+    }
+  };
+  fix(source.effects);
+  // efeitos dentro de appliedEffects (atores)
+  if (Array.isArray(source.appliedEffects)) {
+    for (const ae of source.appliedEffects) fix(ae?.effects);
+  }
+  return source;
+}
+
+/**
  * Wrapper de MIGRAÇÃO: converte os campos planos de ação antigos (canRoll,
  * rollAttr, hasTarget, damage, etc. no nível system) em uma única entrada
  * no novo array system.actions, quando este ainda não existir.

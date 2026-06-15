@@ -4,6 +4,7 @@
  */
 import { LigeiaActor } from "./documents/actor.mjs";
 import { LigeiaItem } from "./documents/item.mjs";
+import { LigeiaCombatant } from "./documents/combatant.mjs";
 import { LigeiaCharacterSheet } from "./sheets/character-sheet.mjs";
 import {
   HabilidadeSheet,
@@ -45,6 +46,7 @@ Hooks.once("init", function () {
   // Classes de documento
   CONFIG.Actor.documentClass = LigeiaActor;
   CONFIG.Item.documentClass = LigeiaItem;
+  CONFIG.Combatant.documentClass = LigeiaCombatant;
 
   // DataModels — Actors
   CONFIG.Actor.dataModels = {
