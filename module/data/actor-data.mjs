@@ -33,6 +33,14 @@ function appliedEffectsField() {
         enabled: new fields.BooleanField({ initial: false }),
         attr: new fields.StringField({ blank: true, initial: "mente" }),
         dc: new fields.NumberField({ initial: 0, integer: true, min: 0 }),
+        // Quando true, a CD veio da rolagem de conjuração de quem aplicou.
+        vsCast: new fields.BooleanField({ initial: false }),
+      }),
+      // Dano contínuo por rodada aplicado ao portador (0 = nenhum).
+      tickDamage: new fields.SchemaField({
+        amount: new fields.NumberField({ initial: 0, integer: true, min: 0 }),
+        type: new fields.StringField({ blank: true, initial: "" }),
+        resource: new fields.StringField({ initial: "hp", choices: ["hp", "mp", "heroic"] }),
       }),
       source: new fields.StringField({ blank: true, initial: "" }),
     }),

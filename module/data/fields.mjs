@@ -121,6 +121,31 @@ export function actionEntryField() {
     }),
     scalingDamage: new fields.BooleanField({ initial: false }),
     appliesConditions: new fields.ArrayField(new fields.StringField({ blank: false }), { initial: [] }),
+    // Efeitos (buffs/debuffs) aplicados ao ALVO quando a ação acerta.
+    // Cada um vira um "efeito ativo" na ficha do alvo, com duração e
+    // resistência por rodada (a CD pode ser a própria rolagem da conjuração).
+    appliesEffects: new fields.ArrayField(
+      new fields.SchemaField({
+        label: new fields.StringField({ blank: true, initial: "Efeito" }),
+        // Um modificador (use várias entradas para vários modificadores)
+        fxType: new fields.StringField({ initial: "bonus", choices: ["bonus", "dice", "stat"] }),
+        fxTarget: new fields.StringField({ blank: true, initial: "all" }),
+        fxValue: new fields.NumberField({ initial: 0, integer: true }),
+        // Duração em rodadas; 0 = até o fim da cena (combate)
+        durationRounds: new fields.NumberField({ initial: 0, integer: true, min: 0 }),
+        // Resistência por rodada
+        resist: new fields.BooleanField({ initial: false }),
+        resistAttr: new fields.StringField({ blank: true, initial: "vigor" }),
+        // Se true, a CD da resistência é a rolagem da conjuração (uma vez)
+        resistVsCast: new fields.BooleanField({ initial: true }),
+        resistDc: new fields.NumberField({ initial: 0, integer: true, min: 0 }),
+        // Dano contínuo por rodada (0 = nenhum) — ex.: Corrosão
+        tickAmount: new fields.NumberField({ initial: 0, integer: true, min: 0 }),
+        tickType: new fields.StringField({ blank: true, initial: "" }),
+        tickResource: new fields.StringField({ initial: "hp", choices: ["hp", "mp", "heroic"] }),
+      }),
+      { initial: [] },
+    ),
     range: new fields.NumberField({ initial: 0, integer: false, min: 0 }),
     area: new fields.NumberField({ initial: 0, integer: false, min: 0 }),
     // Custo da ação ao ser executada (descontado do personagem). 0 = grátis.

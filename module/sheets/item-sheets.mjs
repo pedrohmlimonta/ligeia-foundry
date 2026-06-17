@@ -30,6 +30,8 @@ class LigeiaItemSheetBase extends HandlebarsApplicationMixin(ItemSheetV2) {
       removeTrait: LigeiaItemSheetBase._onRemoveTrait,
       addAction: LigeiaItemSheetBase._onAddAction,
       removeAction: LigeiaItemSheetBase._onRemoveAction,
+      addAppliesEffect: LigeiaItemSheetBase._onAddAppliesEffect,
+      removeAppliesEffect: LigeiaItemSheetBase._onRemoveAppliesEffect,
     },
   };
 
@@ -80,16 +82,7 @@ class LigeiaItemSheetBase extends HandlebarsApplicationMixin(ItemSheetV2) {
         }
         // Remove buracos ANTES de mexer (evita arr[i] undefined).
         arr = arr.filter((v) => v !== undefined && v !== null);
-        // Coleta as condições (checkboxes) por índice de ação a partir do form.
-        for (let i = 0; i < arr.length; i++) {
-          const boxes = form.querySelectorAll(`input[name="system.actions.${i}.appliesConditions"]`);
-          if (boxes && boxes.length) {
-            arr[i].appliesConditions = Array.from(boxes).filter((b) => b.checked).map((b) => b.value);
-          } else {
-            arr[i].appliesConditions = arr[i].appliesConditions || [];
-          }
-        }
-        sys.actions = arr;
+
       } else {
         // Form sem nenhum campo de ação → preserva o documento.
         delete sys.actions;
@@ -388,6 +381,35 @@ class LigeiaItemSheetBase extends HandlebarsApplicationMixin(ItemSheetV2) {
   }
   static async _onRemoveAction(event, target) {
     await this._removeFromArray("system.actions", Number(target.dataset.index));
+  }
+
+  /** Reescreve o array inteiro de ações (preservando contra a corrida). */
+  async _replaceActions(actions) {
+    this.#arrayOpInProgress = true;
+    try { await this.document.update({ "system.actions": actions }); }
+    finally { this.#arrayOpInProgress = false; }
+  }
+
+  /* ---- Efeitos aplicados ao alvo (sub-lista de cada ação) ---- */
+  static async _onAddAppliesEffect(event, target) {
+    const ai = Number(target.dataset.actionIndex);
+    const actions = foundry.utils.deepClone(this.document.system.actions || []);
+    if (!actions[ai]) return;
+    actions[ai].appliesEffects = actions[ai].appliesEffects || [];
+    actions[ai].appliesEffects.push({
+      label: "Efeito", fxType: "bonus", fxTarget: "all", fxValue: 0,
+      durationRounds: 0, resist: false, resistAttr: "vigor", resistVsCast: true,
+      resistDc: 0, tickAmount: 0, tickType: "", tickResource: "hp",
+    });
+    await this._replaceActions(actions);
+  }
+  static async _onRemoveAppliesEffect(event, target) {
+    const ai = Number(target.dataset.actionIndex);
+    const fi = Number(target.dataset.index);
+    const actions = foundry.utils.deepClone(this.document.system.actions || []);
+    if (!actions[ai]?.appliesEffects) return;
+    actions[ai].appliesEffects.splice(fi, 1);
+    await this._replaceActions(actions);
   }
 }
 

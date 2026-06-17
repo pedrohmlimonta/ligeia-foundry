@@ -1276,3 +1276,13 @@
   gap: 0.3rem; margin-top: 0.3rem;
 }
 .lig-applied-config label { font-size: 0.72rem; }
+
+/* Efeitos aplicados ao alvo (editor de ação) */
+.lig-applies-fx-editor { margin-top: 0.5rem; }
+.lig-applies-fx-row {
+  border: 1px dashed var(--lig-border, #5a4a2a);
+  border-radius: 4px; padding: 0.3rem; margin-bottom: 0.3rem;
+}
+.lig-fx-name { flex: 1; font-weight: 600; }
+.lig-atk-fx { font-size: 0.82rem; margin-top: 0.1rem; color: #a0d8c0; }
+.lig-atk-fx.muted { color: #8a7a55; font-style: italic; }

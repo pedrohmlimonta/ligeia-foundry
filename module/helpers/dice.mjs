@@ -252,7 +252,7 @@ export async function applyConditionsToActor(actor, ids = []) {
  * personagem (self/area/aura com includeSelf). `acertou` indica se a defesa
  * falhou (ou se não houve defesa, em self/auto).
  */
-async function resolveHitOnActor(action, tActor, { damageRoll, atkTotal, defTotal, acertou, cfg, attackerMods }) {
+async function resolveHitOnActor(action, tActor, { damageRoll, atkTotal, defTotal, acertou, cfg, attackerMods, caster }) {
   let dmgText = "";
   let condText = "";
   const dmgTypeLabel = action.damageType ? (cfg.damageTypes?.[action.damageType] || action.damageType) : "";
@@ -310,7 +310,48 @@ async function resolveHitOnActor(action, tActor, { damageRoll, atkTotal, defTota
       condText = `<div class="lig-atk-cond muted">Condições a aplicar: ${action.appliesConditions.join(", ")} (peça ao Mestre)</div>`;
     }
   }
-  return dmgText + condText;
+
+  // Aplica EFEITOS (buffs/debuffs) ao alvo quando acerta.
+  let fxText = "";
+  const fxList = action.appliesEffects || [];
+  if (acertou && fxList.length) {
+    if (tActor.isOwner) {
+      const cur = foundry.utils.deepClone(tActor.system?.appliedEffects || []);
+      const names = [];
+      for (const ae of fxList) {
+        const hasMod = (Number(ae.fxValue) || 0) !== 0;
+        cur.push({
+          label: ae.label || "Efeito",
+          icon: "icons/svg/aura.svg",
+          effects: hasMod
+            ? [{ type: ae.fxType || "bonus", target: ae.fxTarget || "all", value: Number(ae.fxValue) || 0, enabled: true }]
+            : [],
+          disabled: false,
+          duration: { rounds: ae.durationRounds || 0, remaining: ae.durationRounds || 0 },
+          endRoll: {
+            enabled: !!ae.resist,
+            attr: ae.resistAttr || "vigor",
+            // CD = rolagem da conjuração (uma vez) ou CD fixa
+            dc: ae.resistVsCast ? atkTotal : (ae.resistDc || 0),
+            vsCast: !!ae.resistVsCast,
+          },
+          tickDamage: {
+            amount: ae.tickAmount || 0,
+            type: ae.tickType || "",
+            resource: ae.tickResource || "hp",
+          },
+          source: caster?.name || "",
+        });
+        names.push(ae.label || "Efeito");
+      }
+      await tActor.update({ "system.appliedEffects": cur });
+      fxText = `<div class="lig-atk-fx">Efeitos aplicados: <strong>${names.join(", ")}</strong></div>`;
+    } else {
+      fxText = `<div class="lig-atk-fx muted">Efeitos a aplicar: ${fxList.map((e) => e.label || "Efeito").join(", ")} (peça ao Mestre)</div>`;
+    }
+  }
+
+  return dmgText + condText + fxText;
 }
 
 /**
@@ -505,7 +546,7 @@ export async function rollItemAction({ actor, item, action, hidden = false, over
         defInfo = isSelf ? ' <span class="lig-outcome self">(em si)</span>' : ' <span class="lig-outcome ok">(automático)</span>';
       }
 
-      const detail = await resolveHitOnActor(action, tActor, { damageRoll, atkTotal, defTotal, acertou, cfg, attackerMods: atkCond });
+      const detail = await resolveHitOnActor(action, tActor, { damageRoll, atkTotal, defTotal, acertou, cfg, attackerMods: atkCond, caster: actor });
       lines.push(`<div class="lig-atk-target"><div class="lig-atk-line"><strong>${tActor.name}</strong>${defInfo}</div>${detail}</div>`);
     }
   } else if (mode === "target") {

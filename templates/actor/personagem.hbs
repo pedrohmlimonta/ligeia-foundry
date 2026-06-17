@@ -180,7 +180,9 @@
         </label>
         {{#if ae.endRoll.enabled}}
         <label>Atributo
-          <input type="text" name="system.appliedEffects.{{ae.index}}.endRoll.attr" value="{{ae.endRoll.attr}}"/>
+          <select name="system.appliedEffects.{{ae.index}}.endRoll.attr">
+            {{selectOptions ../attrLabels selected=ae.endRoll.attr}}
+          </select>
         </label>
         <label>CD
           <input type="number" name="system.appliedEffects.{{ae.index}}.endRoll.dc" value="{{ae.endRoll.dc}}" min="0"/>

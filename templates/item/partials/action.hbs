@@ -122,6 +122,83 @@
         {{/each}}
       </div>
     </div>
+
+    <div class="lig-applies-fx-editor">
+      <div class="lig-subtitle">
+        Efeitos aplicados ao alvo (buff/debuff)
+        <button type="button" class="lig-mini-btn" data-action="addAppliesEffect" data-action-index="{{i}}">+ efeito</button>
+      </div>
+      {{#each act.appliesEffects as |fx fi|}}
+      <div class="lig-applies-fx-row">
+        <div class="lig-item-row">
+          <input type="text" name="system.actions.{{i}}.appliesEffects.{{fi}}.label" value="{{fx.label}}" placeholder="Nome do efeito" class="lig-fx-name"/>
+          <button type="button" class="lig-mini-btn danger" data-action="removeAppliesEffect" data-action-index="{{i}}" data-index="{{fi}}" title="Remover">✕</button>
+        </div>
+        <div class="lig-item-row">
+          <label>Modificador
+            <select name="system.actions.{{i}}.appliesEffects.{{fi}}.fxType">
+              <option value="bonus" {{#if (eq fx.fxType "bonus")}}selected{{/if}}>Bônus</option>
+              <option value="dice" {{#if (eq fx.fxType "dice")}}selected{{/if}}>Dados</option>
+              <option value="stat" {{#if (eq fx.fxType "stat")}}selected{{/if}}>Atributo/Recurso</option>
+            </select>
+          </label>
+          <label>Alvo
+            <input type="text" name="system.actions.{{i}}.appliesEffects.{{fi}}.fxTarget" value="{{fx.fxTarget}}" placeholder="forca, esquiva, all, hp…"/>
+          </label>
+          <label>Valor
+            <input type="number" name="system.actions.{{i}}.appliesEffects.{{fi}}.fxValue" value="{{fx.fxValue}}"/>
+          </label>
+          <label>Duração (rodadas)
+            <input type="number" name="system.actions.{{i}}.appliesEffects.{{fi}}.durationRounds" value="{{fx.durationRounds}}" min="0" placeholder="0 = até fim da cena"/>
+          </label>
+        </div>
+        <div class="lig-item-row">
+          <label class="lig-inline-check">
+            <input type="checkbox" name="system.actions.{{i}}.appliesEffects.{{fi}}.resist" {{checked fx.resist}}/>
+            Resistência por rodada
+          </label>
+          {{#if fx.resist}}
+          <label>Atributo
+            <select name="system.actions.{{i}}.appliesEffects.{{fi}}.resistAttr">
+              <option value="forca" {{#if (eq fx.resistAttr "forca")}}selected{{/if}}>Força</option>
+              <option value="agilidade" {{#if (eq fx.resistAttr "agilidade")}}selected{{/if}}>Agilidade</option>
+              <option value="vigor" {{#if (eq fx.resistAttr "vigor")}}selected{{/if}}>Vigor</option>
+              <option value="mente" {{#if (eq fx.resistAttr "mente")}}selected{{/if}}>Mente</option>
+              <option value="percepcao" {{#if (eq fx.resistAttr "percepcao")}}selected{{/if}}>Percepção</option>
+            </select>
+          </label>
+          <label class="lig-inline-check">
+            <input type="checkbox" name="system.actions.{{i}}.appliesEffects.{{fi}}.resistVsCast" {{checked fx.resistVsCast}}/>
+            CD = rolagem da conjuração
+          </label>
+          {{#unless fx.resistVsCast}}
+          <label>CD fixa
+            <input type="number" name="system.actions.{{i}}.appliesEffects.{{fi}}.resistDc" value="{{fx.resistDc}}" min="0"/>
+          </label>
+          {{/unless}}
+          {{/if}}
+        </div>
+        <div class="lig-item-row">
+          <label>Dano contínuo/rodada
+            <input type="number" name="system.actions.{{i}}.appliesEffects.{{fi}}.tickAmount" value="{{fx.tickAmount}}" min="0" placeholder="0 = nenhum"/>
+          </label>
+          <label>Tipo
+            <select name="system.actions.{{i}}.appliesEffects.{{fi}}.tickType">
+              <option value="" {{#unless fx.tickType}}selected{{/unless}}>—</option>
+              {{selectOptions ../damageTypes selected=fx.tickType}}
+            </select>
+          </label>
+          <label>Recurso
+            <select name="system.actions.{{i}}.appliesEffects.{{fi}}.tickResource">
+              <option value="hp" {{#if (eq fx.tickResource "hp")}}selected{{/if}}>PV</option>
+              <option value="mp" {{#if (eq fx.tickResource "mp")}}selected{{/if}}>PM</option>
+              <option value="heroic" {{#if (eq fx.tickResource "heroic")}}selected{{/if}}>PH</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      {{/each}}
+    </div>
   </div>
   {{/each}}
   {{#unless actions.length}}

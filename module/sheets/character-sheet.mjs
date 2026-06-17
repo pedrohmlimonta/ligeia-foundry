@@ -426,32 +426,45 @@ export class LigeiaCharacterSheet extends HandlebarsApplicationMixin(ActorSheetV
       finally { this.#fxOpInProgress = false; }
   }
 
-  /** Passa uma rodada: decrementa a duração; remove ao chegar a zero. */
+  /** Passa uma rodada: aplica dano contínuo e decrementa a duração. */
   static async #onTickAppliedEffect(event, target) {
     const idx = Number(target.dataset.index);
     const arr = foundry.utils.deepClone(this.document.system.appliedEffects || []);
     const ae = arr[idx];
     if (!ae) return;
-    const rounds = ae.duration?.rounds || 0;
-    if (rounds <= 0) {
-      ui.notifications?.info(`"${ae.label}" não tem duração definida.`);
-      return;
-    }
-    ae.duration.remaining = Math.max(0, (ae.duration.remaining ?? rounds) - 1);
-    if (ae.duration.remaining <= 0) {
-      arr.splice(idx, 1);
-      this.#fxOpInProgress = true;
-      try { await this.document.update({ "system.appliedEffects": arr }); }
-      finally { this.#fxOpInProgress = false; }
-      ChatMessage.create({
+
+    // Dano contínuo por rodada (ex.: Corrosão)
+    const tick = ae.tickDamage || {};
+    if ((tick.amount || 0) > 0) {
+      const applied = await applyDamageToActor(this.document, tick.amount, tick.resource || "hp");
+      const resLabel = { hp: "PV", mp: "PM", heroic: "PH" }[tick.resource || "hp"];
+      const typeLabel = tick.type ? (CONFIG.LIGEIA?.damageTypes?.[tick.type] || tick.type) : "";
+      await ChatMessage.create({
         speaker: ChatMessage.getSpeaker({ actor: this.document }),
-        content: `<div class="ligeia-roll-flavor"><strong>${this.document.name}</strong>: o efeito <em>${ae.label}</em> terminou.</div>`,
+        content: `<div class="ligeia-roll-flavor"><strong>${this.document.name}</strong> — <em>${ae.label}</em>: ${tick.amount} de dano${typeLabel ? " " + typeLabel : ""}${applied.applied ? ` (${resLabel}: ${applied.newValue}/${applied.newMax})` : ""}</div>`,
       });
-    } else {
-      this.#fxOpInProgress = true;
+    }
+
+    const rounds = ae.duration?.rounds || 0;
+    if (rounds > 0) {
+      // Duração contada em rodadas
+      ae.duration.remaining = Math.max(0, (ae.duration.remaining ?? rounds) - 1);
+      if (ae.duration.remaining <= 0) {
+        arr.splice(idx, 1);
+        this.#fxOpInProgress = true;
       try { await this.document.update({ "system.appliedEffects": arr }); }
       finally { this.#fxOpInProgress = false; }
+        ChatMessage.create({
+          speaker: ChatMessage.getSpeaker({ actor: this.document }),
+          content: `<div class="ligeia-roll-flavor"><strong>${this.document.name}</strong>: o efeito <em>${ae.label}</em> terminou.</div>`,
+        });
+        return;
+      }
     }
+    // rounds === 0 → dura até o fim da cena (não expira por rodada)
+    this.#fxOpInProgress = true;
+      try { await this.document.update({ "system.appliedEffects": arr }); }
+      finally { this.#fxOpInProgress = false; }
   }
 
   /** Rola para tentar encerrar um efeito (sucesso ≥ CD remove o efeito). */
