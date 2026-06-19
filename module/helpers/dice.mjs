@@ -10,6 +10,28 @@
  *  - Falha crítica: os 2 dados que entram na soma são ambos "1".
  */
 
+/**
+ * Pequena pausa (ms). Usada para separar a rolagem de ataque da de defesa,
+ * dando a sensação de duas rolagens distintas.
+ */
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Espera o tempo aproximado da animação 3D dos dados (Dice So Nice), se
+ * estiver ativo, com um pequeno respiro adicional. Cai num delay fixo caso
+ * o módulo não esteja presente.
+ */
+async function waitForDiceAnimation(fallbackMs = 1100) {
+  const dsn = game.modules?.get?.("dice-so-nice")?.active;
+  if (!dsn) {
+    await delay(600);
+    return;
+  }
+  await delay(fallbackMs);
+}
+
 import { conditionModifiers } from "./conditions.mjs";
 
 /**
@@ -424,7 +446,8 @@ export async function rollItemAction({ actor, item, action, hidden = false, over
   const mode = action.targetMode || "target";
   const atkKey = action.rollAttr || "forca";
   const lines = [];
-  const rolls = [];
+  const atkRolls = []; // ataque + dano (1ª mensagem)
+  const defRolls = []; // defesas dos alvos (2ª mensagem)
 
   // Gasta os custos da ação (PM/PV/PH) do executor.
   const costText = await spendActionCosts(actor, action);
@@ -446,7 +469,7 @@ export async function rollItemAction({ actor, item, action, hidden = false, over
       bonus: (Number(action.rollBonus) || 0) + rmBonus,
       difficulty: null,
     });
-    rolls.push(atkRoll.roll);
+    atkRolls.push(atkRoll.roll);
   }
   const atkLabel = (cfg.attackAttrs?.[atkKey]) || atkKey;
   const atkTotal = atkRoll ? atkRoll.total : 0;
@@ -455,7 +478,7 @@ export async function rollItemAction({ actor, item, action, hidden = false, over
   // Rola dano (uma vez; aplicado a cada alvo afetado)
   let damageRoll = null;
   if (action.damage && String(action.damage).trim()) {
-    try { damageRoll = new Roll(String(action.damage)); await damageRoll.evaluate(); rolls.push(damageRoll); }
+    try { damageRoll = new Roll(String(action.damage)); await damageRoll.evaluate(); atkRolls.push(damageRoll); }
     catch (e) { damageRoll = null; }
   }
 
@@ -497,6 +520,39 @@ export async function rollItemAction({ actor, item, action, hidden = false, over
     }
   }
   // mode "none": nenhum alvo
+
+  // Cabeçalho do ataque (atacante) — usado na 1ª mensagem.
+  const atkHeader = atkRoll
+    ? `<span class="lig-atk-attr">${atkLabel} → ${atkRoll.total}${atkCondNote}</span>
+       ${atkRoll.isCritSuccess ? '<span class="ligeia-crit success">✦ Crítico ✦</span>' : ""}
+       ${atkRoll.isCritFail ? '<span class="ligeia-crit fail">✗ Falha Crítica ✗</span>' : ""}`
+    : "";
+  const speaker = ChatMessage.getSpeaker({ actor });
+  const whisperData = hidden
+    ? { whisper: ChatMessage.getWhisperRecipients("GM"), blind: true }
+    : {};
+
+  // Determina se HAVERÁ rolagem de defesa (algum alvo que não seja o próprio,
+  // num modo com defesa). Só nesse caso separamos em duas mensagens com delay.
+  const willDefend = action.canRoll
+    && (mode === "target" || mode === "area" || mode === "aura")
+    && affected.some((x) => !x.isSelf);
+
+  // Se haverá defesa, posta PRIMEIRO o ataque (e o dano) numa mensagem
+  // própria, espera a animação dos dados e só então rola/posta as defesas —
+  // dando a sensação de duas rolagens distintas.
+  if (willDefend && atkRoll) {
+    const atkFlavor = `
+      <div class="ligeia-roll-flavor lig-action">
+        <strong>${item.name}</strong> <span class="lig-act-name">— ${action.label || "Ação"}</span>
+        ${metaText}
+        ${costText}
+        ${atkHeader}
+        <div class="lig-atk-hint">Resolvendo defesa…</div>
+      </div>`;
+    await ChatMessage.create({ speaker, flavor: atkFlavor, rolls: atkRolls, sound: CONFIG.sounds.dice, ...whisperData });
+    await waitForDiceAnimation();
+  }
 
   // ---- Resolve cada alvo afetado ----
   if (affected.length) {
@@ -540,7 +596,7 @@ export async function rollItemAction({ actor, item, action, hidden = false, over
           bonus: def.penalty + (tActor.system?.rollMods?.all?.bonus || 0) + (tActor.system?.rollMods?.defense?.bonus || 0),
           difficulty: atkTotal,
         });
-        rolls.push(defRoll.roll);
+        defRolls.push(defRoll.roll);
         defTotal = defRoll.total;
         acertou = defRoll.total < atkTotal;
         const defLabel = (cfg.defenseAttrs?.[def.key]) || def.key;
@@ -570,13 +626,18 @@ export async function rollItemAction({ actor, item, action, hidden = false, over
     lines.push(`<div class="lig-atk-dmg">${resWord}: <strong>${damageRoll.total}</strong>${typeNote}</div>`);
   }
 
-  // ---- Monta a mensagem ----
-  const atkHeader = atkRoll
-    ? `<span class="lig-atk-attr">${atkLabel} → ${atkRoll.total}${atkCondNote}</span>
-       ${atkRoll.isCritSuccess ? '<span class="ligeia-crit success">✦ Crítico ✦</span>' : ""}
-       ${atkRoll.isCritFail ? '<span class="ligeia-crit fail">✗ Falha Crítica ✗</span>' : ""}`
-    : "";
+  // ---- Monta a mensagem final ----
+  if (willDefend && atkRoll) {
+    // Já postamos o ataque; esta 2ª mensagem traz as defesas e resultados.
+    const defFlavor = `
+      <div class="ligeia-roll-flavor lig-action lig-action-resolve">
+        <span class="lig-act-name">${item.name} — ${action.label || "Ação"} · resultado (ataque ${atkRoll.total})</span>
+        ${lines.join("")}
+      </div>`;
+    return ChatMessage.create({ speaker, flavor: defFlavor, rolls: defRolls, sound: CONFIG.sounds.dice, ...whisperData });
+  }
 
+  // Caso sem defesa: uma mensagem única com tudo.
   const flavor = `
     <div class="ligeia-roll-flavor lig-action">
       <strong>${item.name}</strong> <span class="lig-act-name">— ${action.label || "Ação"}</span>
@@ -585,12 +646,5 @@ export async function rollItemAction({ actor, item, action, hidden = false, over
       ${atkHeader}
       ${lines.join("")}
     </div>`;
-
-  const speaker = ChatMessage.getSpeaker({ actor });
-  const messageData = { speaker, flavor, rolls, sound: CONFIG.sounds.dice };
-  if (hidden) {
-    messageData.whisper = ChatMessage.getWhisperRecipients("GM");
-    messageData.blind = true;
-  }
-  return ChatMessage.create(messageData);
+  return ChatMessage.create({ speaker, flavor, rolls: [...atkRolls, ...defRolls], sound: CONFIG.sounds.dice, ...whisperData });
 }

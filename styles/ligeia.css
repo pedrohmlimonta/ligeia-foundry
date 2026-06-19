@@ -1286,3 +1286,9 @@
 .lig-fx-name { flex: 1; font-weight: 600; }
 .lig-atk-fx { font-size: 0.82rem; margin-top: 0.1rem; color: #a0d8c0; }
 .lig-atk-fx.muted { color: #8a7a55; font-style: italic; }
+
+/* Mensagem de resolução (defesas) — 2ª mensagem após o delay do ataque */
+.lig-action-resolve .lig-act-name {
+  display: block; font-size: 0.82rem; color: var(--lig-gold, #c9a84a);
+  margin-bottom: 0.25rem; opacity: 0.9;
+}
