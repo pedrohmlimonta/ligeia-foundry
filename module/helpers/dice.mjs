@@ -52,6 +52,8 @@ export async function rollLigeia({
   improvement = 0,
   bonus = 0,
   difficulty = null,
+  reroll1 = 0,
+  reroll6 = 0,
 } = {}) {
   // Dados de melhoria: positivo = vantagem (mantém os 2 MAIORES);
   // negativo = desvantagem (rola os mesmos dados extras e mantém os 2
@@ -60,12 +62,40 @@ export async function rollLigeia({
   const totalDice = 2 + extra;
   const keepMode = (improvement || 0) < 0 ? "kl2" : "kh2";
   const flat = (attribute || 0) + (bonus || 0);
-  const formulaParts = [`${totalDice}d6${keepMode}`];
+
+  // ----- Reroll de dados (1 e/ou 6) -----
+  // Os modificadores de reroll do Foundry são aplicados na fórmula. Para
+  // "reroll de TODOS" usamos `ro` (reroll once por dado). Para um número
+  // limitado (rerrolar até N dados), aplicamos o reroll manualmente após a
+  // rolagem (o Foundry não tem sintaxe nativa para "rerrolar até N").
+  const r1All = reroll1 === "all" || reroll1 === Infinity;
+  const r6All = reroll6 === "all" || reroll6 === Infinity;
+  const r1Count = r1All ? Infinity : Math.max(0, Number(reroll1) || 0);
+  const r6Count = r6All ? Infinity : Math.max(0, Number(reroll6) || 0);
+
+  // Modificadores nativos só quando é "todos" (mais natural com Dice So Nice).
+  let diceMods = "";
+  if (r1All) diceMods += "ro1";
+  if (r6All) diceMods += "ro6";
+
+  const formulaParts = [`${totalDice}d6${diceMods}${keepMode}`];
   if (flat !== 0) formulaParts.push(`${flat >= 0 ? "+" : "-"} ${Math.abs(flat)}`);
   const formula = formulaParts.join(" ");
 
   const roll = new Roll(formula);
   await roll.evaluate();
+
+  // Reroll manual com CONTAGEM limitada (quando não é "todos").
+  // Reaproveita o termo de dados do roll, troca os resultados marcados e
+  // recalcula o total preservando o modo de manter (kh2/kl2).
+  const dieTerm0 = roll.dice[0];
+  if (dieTerm0 && (r1Count > 0 && r1Count !== Infinity || r6Count > 0 && r6Count !== Infinity)) {
+    await applyLimitedReroll(dieTerm0, { ones: r1Count, sixes: r6Count });
+    // Recalcula quais dados ficam ativos (kh2/kl2) e o total da rolagem.
+    recomputeKeep(dieTerm0, keepMode);
+    // Atualiza o total do Roll somando o termo de dados + flat.
+    roll._total = sumKept(dieTerm0) + flat;
+  }
 
   // Extrai os dados individuais
   const dieTerm = roll.dice[0];
@@ -103,6 +133,87 @@ export async function rollLigeia({
     flat,
     totalDice,
   };
+}
+
+/**
+ * Reroll manual com contagem limitada. Para cada dado que mostra o valor
+ * alvo (1 e/ou 6), até o limite informado, marca o resultado original como
+ * descartado por reroll e adiciona um novo resultado no lugar.
+ * @param {DiceTerm} dieTerm  termo de dados (d6) já avaliado
+ * @param {{ones:number, sixes:number}} limits  quantos rerrolar de cada
+ */
+async function applyLimitedReroll(dieTerm, { ones = 0, sixes = 0 } = {}) {
+  let remainingOnes = ones === Infinity ? Infinity : ones;
+  let remainingSixes = sixes === Infinity ? Infinity : sixes;
+  const faces = dieTerm.faces || 6;
+  const newResults = [];
+  for (const res of dieTerm.results) {
+    // Só rerrola dados ainda válidos (não descartados/já rerrolados).
+    if (res.rerolled || res.discarded) { newResults.push(res); continue; }
+    let doReroll = false;
+    if (res.result === 1 && remainingOnes > 0) { doReroll = true; if (remainingOnes !== Infinity) remainingOnes--; }
+    else if (res.result === 6 && remainingSixes > 0) { doReroll = true; if (remainingSixes !== Infinity) remainingSixes--; }
+
+    if (doReroll) {
+      res.rerolled = true;
+      res.active = false; // o valor original sai da soma
+      newResults.push(res);
+      // Novo dado no lugar
+      const newVal = Math.ceil(CONFIG.Dice.randomUniform() * faces);
+      newResults.push({ result: newVal, active: true });
+    } else {
+      newResults.push(res);
+    }
+  }
+  dieTerm.results = newResults;
+}
+
+/**
+ * Recalcula quais resultados ficam "ativos" segundo o modo de manter
+ * (kh2 = 2 maiores; kl2 = 2 menores), considerando apenas os dados não
+ * rerrolados (os rerrolados já estão com active=false).
+ */
+function recomputeKeep(dieTerm, keepMode) {
+  const live = dieTerm.results.filter((r) => !r.rerolled);
+  // Ordena por valor
+  const sorted = [...live].sort((a, b) => a.result - b.result);
+  const keep = keepMode === "kl2" ? sorted.slice(0, 2) : sorted.slice(-2);
+  const keepSet = new Set(keep);
+  for (const r of live) r.active = keepSet.has(r);
+}
+
+/** Soma os resultados ativos de um termo de dados. */
+function sumKept(dieTerm) {
+  return dieTerm.results.filter((r) => r.active).reduce((s, r) => s + r.result, 0);
+}
+
+/**
+ * Combina dois valores de reroll (número ≥0 ou "all"/Infinity). "all" vence.
+ */
+function mergeReroll(a, b) {
+  const aAll = a === "all" || a === Infinity;
+  const bAll = b === "all" || b === Infinity;
+  if (aAll || bAll) return Infinity;
+  return (Number(a) || 0) + (Number(b) || 0);
+}
+
+/**
+ * Calcula o reroll (1s e 6s) efetivo para uma rolagem de um ator, combinando:
+ *  - o reroll do atributo/secundário (attrReroll[key])
+ *  - o reroll da categoria "all" (todas as rolagens)
+ *  - o reroll da categoria extra informada ("attack" ou "defense"), se houver
+ * @returns {{reroll1:(number|'all'), reroll6:(number|'all')}}
+ */
+export function rerollFor(actor, key, category = null) {
+  const ar = actor?.system?.attrReroll?.[key] || {};
+  const rm = actor?.system?.rollMods || {};
+  let r1 = mergeReroll(ar.reroll1 || 0, rm.all?.reroll1 || 0);
+  let r6 = mergeReroll(ar.reroll6 || 0, rm.all?.reroll6 || 0);
+  if (category && rm[category]) {
+    r1 = mergeReroll(r1, rm[category].reroll1 || 0);
+    r6 = mergeReroll(r6, rm[category].reroll6 || 0);
+  }
+  return { reroll1: r1 === Infinity ? "all" : r1, reroll6: r6 === Infinity ? "all" : r6 };
 }
 
 /**
@@ -346,10 +457,12 @@ async function resolveHitOnActor(action, tActor, { damageRoll, atkTotal, defTota
         const condId = isCondition ? (ae.fxTarget || "") : "";
         // Tipos que viram modificador no array effects
         let effects = [];
-        if (!isCondition && (Number(ae.fxValue) || 0) !== 0) {
+        if (!isCondition && ((Number(ae.fxValue) || 0) !== 0 || ae.fxAll)) {
           const eff = { type: ae.fxType || "bonus", target: ae.fxTarget || "all", value: Number(ae.fxValue) || 0, enabled: true };
           // Para dano/RD, o "alvo" é o tipo de dano.
           if (ae.fxType === "damage" || ae.fxType === "rd") eff.damageType = ae.fxTarget || "";
+          // Para reroll, propaga a flag "todos".
+          if (ae.fxType === "reroll1" || ae.fxType === "reroll6") eff.rerollAll = !!ae.fxAll;
           effects = [eff];
         }
         // Ativa a condição no alvo (marcador), se for o caso.
@@ -463,11 +576,14 @@ export async function rollItemAction({ actor, item, action, hidden = false, over
     const rm = actor.system?.rollMods || {};
     const rmDice = (rm.all?.dice || 0) + (rm.attack?.dice || 0);
     const rmBonus = (rm.all?.bonus || 0) + (rm.attack?.bonus || 0);
+    const atkRr = rerollFor(actor, atkKey, "attack");
     atkRoll = await rollLigeia({
       attribute: atk.value,
       improvement: atk.dice + (Number(action.rollDice) || 0) + atkCond.atkDice + rmDice,
       bonus: (Number(action.rollBonus) || 0) + rmBonus,
       difficulty: null,
+      reroll1: atkRr.reroll1,
+      reroll6: atkRr.reroll6,
     });
     atkRolls.push(atkRoll.roll);
   }
@@ -590,11 +706,14 @@ export async function rollItemAction({ actor, item, action, hidden = false, over
           ? ` <span class="lig-def-choice">(melhor de ${cands.map((c) => cfg.defenseAttrs?.[c.key] || c.key).join(" / ")})</span>`
           : "";
 
+        const defRr = rerollFor(tActor, def.key, "defense");
         const defRoll = await rollLigeia({
           attribute: def.base,
           improvement: def.dice + defCond.defDice + (tActor.system?.rollMods?.all?.dice || 0) + (tActor.system?.rollMods?.defense?.dice || 0),
           bonus: def.penalty + (tActor.system?.rollMods?.all?.bonus || 0) + (tActor.system?.rollMods?.defense?.bonus || 0),
           difficulty: atkTotal,
+          reroll1: defRr.reroll1,
+          reroll6: defRr.reroll6,
         });
         defRolls.push(defRoll.roll);
         defTotal = defRoll.total;

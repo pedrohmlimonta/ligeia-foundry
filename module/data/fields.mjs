@@ -15,10 +15,13 @@ export function effectField() {
       type: new fields.StringField({
         required: true,
         initial: "bonus",
-        choices: ["dice", "bonus", "stat", "set", "damage", "rd", "info"],
+        choices: ["dice", "bonus", "stat", "set", "damage", "rd", "reroll1", "reroll6", "info"],
       }),
       target: new fields.StringField({ required: true, initial: "all" }),
       value: new fields.NumberField({ required: true, initial: 0, integer: true }),
+      // Para reroll1/reroll6: se true, rerrola TODOS os dados que caírem no
+      // valor alvo (ignora "value"). Senão, rerrola até "value" dados.
+      rerollAll: new fields.BooleanField({ required: false, initial: false }),
       label: new fields.StringField({ required: false, blank: true, initial: "" }),
       enabled: new fields.BooleanField({ initial: true }),
       // Nível em que o efeito passa a valer (SÓ habilidades usam isto):
@@ -129,12 +132,14 @@ export function actionEntryField() {
         // Tipo do modificador (mesma lista dos efeitos de itens + condição)
         fxType: new fields.StringField({
           initial: "bonus",
-          choices: ["bonus", "dice", "stat", "set", "damage", "rd", "condition"],
+          choices: ["bonus", "dice", "stat", "set", "damage", "rd", "reroll1", "reroll6", "condition"],
         }),
         // Alvo do modificador — depende do tipo (atributo, recurso, tipo de
         // dano ou id de condição). Sempre escolhido por select.
         fxTarget: new fields.StringField({ blank: true, initial: "all" }),
         fxValue: new fields.NumberField({ initial: 0, integer: true }),
+        // Para reroll: se true, rerrola TODOS os dados no valor alvo.
+        fxAll: new fields.BooleanField({ initial: false }),
         // Duração: "rounds" (em rodadas) ou "scene" (até o fim da cena)
         durationMode: new fields.StringField({ initial: "scene", choices: ["rounds", "scene"] }),
         durationRounds: new fields.NumberField({ initial: 1, integer: true, min: 0 }),

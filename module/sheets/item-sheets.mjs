@@ -155,6 +155,8 @@ class LigeiaItemSheetBase extends HandlebarsApplicationMixin(ItemSheetV2) {
       set: "Definir Valor",
       damage: "Bônus de Dano",
       rd: "Redução de Dano",
+      reroll1: "Rerrolar dados que caem 1",
+      reroll6: "Rerrolar dados que caem 6",
       info: "Condição / Texto",
     };
     context.costResources = {
@@ -204,7 +206,9 @@ class LigeiaItemSheetBase extends HandlebarsApplicationMixin(ItemSheetV2) {
     const targetsForType = (type) => {
       switch (type) {
         case "bonus":
-        case "dice": return TARGETS.roll;
+        case "dice":
+        case "reroll1":
+        case "reroll6": return TARGETS.roll;
         case "stat": return TARGETS.stat;
         case "set": return TARGETS.set;
         case "damage":
@@ -232,6 +236,8 @@ class LigeiaItemSheetBase extends HandlebarsApplicationMixin(ItemSheetV2) {
       set: "set",
       damage: "none",
       rd: "none",
+      reroll1: "roll",
+      reroll6: "roll",
       info: "none",
     };
 
@@ -254,6 +260,8 @@ class LigeiaItemSheetBase extends HandlebarsApplicationMixin(ItemSheetV2) {
         targetApplies: setKey !== "none",
         // damage e rd podem ter tipo de dano associado
         isDamageType: e.type === "damage" || e.type === "rd",
+        // reroll1/reroll6 mostram o campo "todos" e o valor é uma contagem
+        isReroll: e.type === "reroll1" || e.type === "reroll6",
       };
     });
 
@@ -396,7 +404,7 @@ class LigeiaItemSheetBase extends HandlebarsApplicationMixin(ItemSheetV2) {
     if (!actions[ai]) return;
     actions[ai].appliesEffects = actions[ai].appliesEffects || [];
     actions[ai].appliesEffects.push({
-      label: "Efeito", fxType: "bonus", fxTarget: "all", fxValue: 0,
+      label: "Efeito", fxType: "bonus", fxTarget: "all", fxValue: 0, fxAll: false,
       durationMode: "scene", durationRounds: 1,
       resist: false, resistAttr: "vigor", resistVsCast: true, resistDc: 0,
       tickAmount: 0, tickType: "", tickResource: "hp",

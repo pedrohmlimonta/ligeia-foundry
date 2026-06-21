@@ -1,7 +1,7 @@
 /**
  * Ficha de Personagem do Ligeia — Foundry V13 (ApplicationV2).
  */
-import { rollLigeia, postRollToChat, rollItemAction, resolveAttr } from "../helpers/dice.mjs";
+import { rollLigeia, postRollToChat, rollItemAction, resolveAttr, rerollFor } from "../helpers/dice.mjs";
 import { placeTemplateForAction } from "../helpers/template.mjs";
 import { computeXpSpent } from "../helpers/xp.mjs";
 import { effectIsActive } from "../helpers/effects.mjs";
@@ -480,12 +480,15 @@ export class LigeiaCharacterSheet extends HandlebarsApplicationMixin(ActorSheetV
     const attrKey = ae.endRoll.attr || "mente";
     const r = resolveAttr(this.document, attrKey);
     const rm = this.document.system?.rollMods || {};
+    const rr = rerollFor(this.document, attrKey);
     const dc = ae.endRoll.dc || 0;
     const result = await rollLigeia({
       attribute: r.value,
       improvement: r.dice + (rm.all?.dice || 0),
       bonus: rm.all?.bonus || 0,
       difficulty: dc,
+      reroll1: rr.reroll1,
+      reroll6: rr.reroll6,
     });
     const success = result.total >= dc;
     const label = (CONFIG.LIGEIA?.attackAttrs?.[attrKey]) || attrKey;
@@ -567,10 +570,13 @@ export class LigeiaCharacterSheet extends HandlebarsApplicationMixin(ActorSheetV
     };
 
     const rm = actor.system?.rollMods || {};
+    const rr = rerollFor(actor, key);
     const result = await rollLigeia({
       attribute: attr.value,
       improvement: attr.dice + (rm.all?.dice || 0),
       bonus: rm.all?.bonus || 0,
+      reroll1: rr.reroll1,
+      reroll6: rr.reroll6,
     });
 
     await postRollToChat({
@@ -598,10 +604,13 @@ export class LigeiaCharacterSheet extends HandlebarsApplicationMixin(ActorSheetV
     // Usa o resolvedor central (já considera dados de efeitos nos secundários)
     const r = resolveAttr(actor, key);
     const rm = actor.system?.rollMods || {};
+    const rr = rerollFor(actor, key);
     const result = await rollLigeia({
       attribute: r.value,
       improvement: r.dice + (rm.all?.dice || 0),
       bonus: rm.all?.bonus || 0,
+      reroll1: rr.reroll1,
+      reroll6: rr.reroll6,
     });
 
     await postRollToChat({

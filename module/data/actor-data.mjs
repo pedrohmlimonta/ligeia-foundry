@@ -157,6 +157,11 @@ export class PersonagemData extends foundry.abstract.TypeDataModel {
     // rolagem (all/attack/defense) em this.rollMods, para uso nas rolagens.
     const mods = aggregateEffectModifiers(this.parent);
     this.rollMods = mods.roll;
+    // Reroll por atributo (primários + secundários) para as rolagens.
+    this.attrReroll = {};
+    for (const k of [...Object.keys(mods.attr)]) {
+      this.attrReroll[k] = { reroll1: mods.attr[k].reroll1 || 0, reroll6: mods.attr[k].reroll6 || 0 };
+    }
     this.effectMods = mods; // exposto para depuração/uso externo
     for (const k of ["forca", "agilidade", "vigor", "mente", "percepcao"]) {
       if (a[k]) {
@@ -272,6 +277,11 @@ export class NpcData extends foundry.abstract.TypeDataModel {
     // Modificadores de efeitos ativos (itens + buffs na ficha)
     const mods = aggregateEffectModifiers(this.parent);
     this.rollMods = mods.roll;
+    // Reroll por atributo (primários + secundários) para as rolagens.
+    this.attrReroll = {};
+    for (const k of [...Object.keys(mods.attr)]) {
+      this.attrReroll[k] = { reroll1: mods.attr[k].reroll1 || 0, reroll6: mods.attr[k].reroll6 || 0 };
+    }
     for (const k of ["forca", "agilidade", "vigor", "mente", "percepcao"]) {
       if (a[k]) {
         a[k].value = (a[k].value || 0) + (mods.attr[k]?.bonus || 0);

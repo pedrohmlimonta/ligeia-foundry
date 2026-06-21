@@ -131,6 +131,8 @@
               <option value="set" {{#if (eq fx.fxType "set")}}selected{{/if}}>Definir valor</option>
               <option value="damage" {{#if (eq fx.fxType "damage")}}selected{{/if}}>Bônus de dano</option>
               <option value="rd" {{#if (eq fx.fxType "rd")}}selected{{/if}}>Redução de dano</option>
+              <option value="reroll1" {{#if (eq fx.fxType "reroll1")}}selected{{/if}}>Rerrolar dados que caem 1</option>
+              <option value="reroll6" {{#if (eq fx.fxType "reroll6")}}selected{{/if}}>Rerrolar dados que caem 6</option>
               <option value="condition" {{#if (eq fx.fxType "condition")}}selected{{/if}}>Condição</option>
             </select>
           </label>
@@ -140,10 +142,16 @@
             </select>
           </label>
           {{#unless (eq fx.fxType "condition")}}
-          <label>Valor
+          <label>{{#if (or (eq fx.fxType "reroll1") (eq fx.fxType "reroll6"))}}Qtd. dados{{else}}Valor{{/if}}
             <input type="number" name="system.actions.{{i}}.appliesEffects.{{fi}}.fxValue" value="{{fx.fxValue}}"/>
           </label>
           {{/unless}}
+          {{#if (or (eq fx.fxType "reroll1") (eq fx.fxType "reroll6"))}}
+          <label class="lig-inline-check" title="Rerrolar TODOS os dados que caírem nesse valor">
+            <input type="checkbox" name="system.actions.{{i}}.appliesEffects.{{fi}}.fxAll" {{checked fx.fxAll}}/>
+            Todos
+          </label>
+          {{/if}}
         </div>
         <div class="lig-item-row">
           <label>Duração

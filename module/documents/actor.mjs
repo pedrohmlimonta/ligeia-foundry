@@ -34,7 +34,24 @@ export class LigeiaActor extends Actor {
     const extra = Math.abs(dice);
     const totalDice = 2 + extra;
     const keep = dice < 0 ? "kl2" : "kh2";
-    const parts = [`${totalDice}d6${keep}`];
+
+    // ----- Reroll (1s e/ou 6s) -----
+    // Combina o reroll do atributo "iniciativa" com o da categoria "all".
+    // O carrossel monta a Roll a partir da fórmula, então usamos os
+    // modificadores nativos do Foundry: `ro1` rerrola (uma vez) os dados que
+    // caem 1; `ro6` os que caem 6. Vale tanto para "todos" quanto para uma
+    // contagem ≥1 (o Foundry não diferencia contagem na fórmula; havendo
+    // qualquer reroll daquele valor, aplica o modificador).
+    const ar = sys.attrReroll?.iniciativa || {};
+    const has = (a, b) => a === "all" || a === Infinity || (Number(a) || 0) > 0
+                       || b === "all" || b === Infinity || (Number(b) || 0) > 0;
+    const rerollOnes = has(ar.reroll1, rm.all?.reroll1);
+    const rerollSixes = has(ar.reroll6, rm.all?.reroll6);
+    let diceMods = "";
+    if (rerollOnes) diceMods += "ro1";
+    if (rerollSixes) diceMods += "ro6";
+
+    const parts = [`${totalDice}d6${diceMods}${keep}`];
     if (bonus !== 0) parts.push(`${bonus >= 0 ? "+" : "-"} ${Math.abs(bonus)}`);
     return new Roll(parts.join(" "), this.getRollData());
   }

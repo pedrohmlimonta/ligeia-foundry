@@ -90,20 +90,33 @@ const STAT_TARGETS = ["hp", "mp", "heroic", "deslocamento"];
  */
 function emptyMods() {
   const attr = {};
-  for (const k of [...PRIMARY_ATTRS, ...SECONDARY_ATTRS]) attr[k] = { bonus: 0, dice: 0, set: null };
+  for (const k of [...PRIMARY_ATTRS, ...SECONDARY_ATTRS]) attr[k] = { bonus: 0, dice: 0, set: null, reroll1: 0, reroll6: 0 };
   const roll = {};
-  for (const k of ROLL_CATEGORIES) roll[k] = { bonus: 0, dice: 0 };
+  for (const k of ROLL_CATEGORIES) roll[k] = { bonus: 0, dice: 0, reroll1: 0, reroll6: 0 };
   const stat = {};
   for (const k of STAT_TARGETS) stat[k] = 0;
   return { attr, roll, stat };
 }
 
 /**
+ * Combina dois valores de reroll (cada um número ≥0 ou "all"/Infinity).
+ * "all" sempre vence; senão soma as contagens.
+ */
+function combineReroll(a, b) {
+  const aAll = a === "all" || a === Infinity;
+  const bAll = b === "all" || b === Infinity;
+  if (aAll || bAll) return Infinity;
+  return (Number(a) || 0) + (Number(b) || 0);
+}
+
+/**
  * Aplica um único efeito (já ativo) à estrutura de modificadores.
- *  - bonus: +valor ao destino (atributo, categoria de rolagem)
- *  - dice:  +valor de dados de melhoria ao destino
- *  - stat:  +valor a um recurso/derivado (hp/mp/heroic/deslocamento)
- *  - set:   define (sobrescreve) o valor de um atributo
+ *  - bonus: +valor ao destino (atributo, categoria de rolagem). NEGATIVO reduz.
+ *  - dice:  +valor de dados de melhoria ao destino. NEGATIVO reduz/dá desvantagem.
+ *  - stat:  +valor a um recurso/derivado (hp/mp/heroic/deslocamento). NEGATIVO reduz.
+ *  - set:   define (sobrescreve) o valor de um atributo.
+ *  - reroll1: rerrola dados que caem 1 (valor = quantos, ou "all").
+ *  - reroll6: rerrola dados que caem 6 (valor = quantos, ou "all").
  */
 function applyEffectToMods(mods, effect) {
   const t = effect.target || "all";
@@ -119,6 +132,14 @@ function applyEffectToMods(mods, effect) {
     if (t in mods.stat) mods.stat[t] += v;
   } else if (effect.type === "set") {
     if (mods.attr[t]) mods.attr[t].set = v; // último a definir vence
+  } else if (effect.type === "reroll1") {
+    const val = effect.rerollAll ? "all" : (Number(effect.value) || 0);
+    if (mods.attr[t]) mods.attr[t].reroll1 = combineReroll(mods.attr[t].reroll1, val);
+    else if (mods.roll[t]) mods.roll[t].reroll1 = combineReroll(mods.roll[t].reroll1, val);
+  } else if (effect.type === "reroll6") {
+    const val = effect.rerollAll ? "all" : (Number(effect.value) || 0);
+    if (mods.attr[t]) mods.attr[t].reroll6 = combineReroll(mods.attr[t].reroll6, val);
+    else if (mods.roll[t]) mods.roll[t].reroll6 = combineReroll(mods.roll[t].reroll6, val);
   }
   // "damage", "rd", "condition", "info" são tratados em outros lugares
 }
