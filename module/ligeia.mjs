@@ -269,6 +269,40 @@ Hooks.once("ready", function () {
 });
 
 /* ------------------------------------------------------------------ */
+/*  Definições únicas: o personagem só pode ter UMA raça, UMA herança  */
+/*  e UMA vocação. Organizações são livres (várias permitidas).        */
+/*  Ao adicionar uma nova definição de tipo único, a anterior é        */
+/*  removida automaticamente (substituição).                           */
+/* ------------------------------------------------------------------ */
+const UNIQUE_DEFINITION_TYPES = ["raca", "heranca", "vocacao"];
+
+Hooks.on("preCreateItem", function (item, data, options, userId) {
+  const parent = item.parent; // o Actor, se embutido
+  if (!parent || parent.documentName !== "Actor") return;
+  if (!UNIQUE_DEFINITION_TYPES.includes(item.type)) return;
+
+  // Já existe uma definição do mesmo tipo? Marca para remover depois da criação.
+  const existing = parent.items.filter((i) => i.type === item.type);
+  if (existing.length) {
+    options.ligeiaReplaceUnique = existing.map((i) => i.id);
+    const label = { raca: "raça", heranca: "herança", vocacao: "vocação" }[item.type] || item.type;
+    ui.notifications?.info(`Substituindo a ${label} anterior de ${parent.name}.`);
+  }
+});
+
+Hooks.on("createItem", async function (item, options, userId) {
+  // Só o usuário que criou processa a remoção, e só se houver itens a remover.
+  if (game.user?.id !== userId) return;
+  const parent = item.parent;
+  if (!parent || parent.documentName !== "Actor") return;
+  const toRemove = options.ligeiaReplaceUnique;
+  if (!Array.isArray(toRemove) || !toRemove.length) return;
+  // Remove as definições antigas do mesmo tipo (mantém só a recém-criada).
+  const ids = toRemove.filter((id) => id !== item.id && parent.items.has(id));
+  if (ids.length) await parent.deleteEmbeddedDocuments("Item", ids);
+});
+
+/* ------------------------------------------------------------------ */
 /*  Preload de templates parciais                                      */
 /* ------------------------------------------------------------------ */
 Hooks.once("setup", async function () {

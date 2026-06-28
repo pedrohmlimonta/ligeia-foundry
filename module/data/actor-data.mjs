@@ -9,6 +9,27 @@ import { migrateEffectTargets } from "./fields.mjs";
 const fields = foundry.data.fields;
 
 /**
+ * Soma os bônus concedidos pelas definições (itens) embutidas no ator:
+ *  - Vocação → hpBonus (PV) e mpBonus (PM)
+ *  - Raça → moveBonus (deslocamento)
+ * Considera apenas a primeira vocação/raça encontrada (o personagem só pode
+ * ter uma de cada). Retorna { hp, mp, move }.
+ */
+function definitionBonuses(actor) {
+  const out = { hp: 0, mp: 0, move: 0 };
+  if (!actor?.items) return out;
+  for (const item of actor.items) {
+    if (item.type === "vocacao") {
+      out.hp += Number(item.system?.hpBonus) || 0;
+      out.mp += Number(item.system?.mpBonus) || 0;
+    } else if (item.type === "raca") {
+      out.move += Number(item.system?.moveBonus) || 0;
+    }
+  }
+  return out;
+}
+
+/**
  * Campo para os efeitos aplicados diretamente em um ator (buffs/debuffs de
  * magias, encantamentos, etc.). Cada entrada tem:
  *  - label/icon: identificação
@@ -173,6 +194,9 @@ export class PersonagemData extends foundry.abstract.TypeDataModel {
       }
     }
 
+    // Bônus concedidos pelas definições embutidas (vocação: PV/PM; raça: deslocamento)
+    const defBonus = definitionBonuses(this.parent);
+
     // ---- Atributos secundários ----
     this.secondary = {
       bloqueio: a.forca.value,
@@ -181,9 +205,10 @@ export class PersonagemData extends foundry.abstract.TypeDataModel {
       // Iniciativa = maior entre Agilidade e Percepção (herda dados de ambos)
       iniciativa: Math.max(a.agilidade.value, a.percepcao.value),
       iniciativaDice: Math.max(a.agilidade.dice, a.percepcao.dice),
-      // Deslocamento = Agilidade + bônus racial + ajuste do GM
+      // Deslocamento = Agilidade + bônus da raça + ajuste do GM
       deslocamento:
         a.agilidade.value +
+        defBonus.move +
         (this.secondaryBonus.moveBonusRace || 0) +
         (this.secondaryBonus.deslocamento || 0),
     };
@@ -212,10 +237,10 @@ export class PersonagemData extends foundry.abstract.TypeDataModel {
     }
 
     // ---- Máximos de recursos ----
-    // PV = Vigor + bônus vocação + nível (+ efeito stat hp)
-    const hpMax = a.vigor.value + (this.resources.hp.bonus || 0) + lvl + (mods.stat.hp || 0);
-    // PM = Mente + bônus vocação + nível (+ efeito stat mp)
-    const mpMax = a.mente.value + (this.resources.mp.bonus || 0) + lvl + (mods.stat.mp || 0);
+    // PV = Vigor + bônus da vocação + bônus manual + nível (+ efeito stat hp)
+    const hpMax = a.vigor.value + defBonus.hp + (this.resources.hp.bonus || 0) + lvl + (mods.stat.hp || 0);
+    // PM = Mente + bônus da vocação + bônus manual + nível (+ efeito stat mp)
+    const mpMax = a.mente.value + defBonus.mp + (this.resources.mp.bonus || 0) + lvl + (mods.stat.mp || 0);
     // PH = nível (+ efeito stat heroic)
     const heroicMax = lvl + (this.resources.heroic.bonus || 0) + (mods.stat.heroic || 0);
 
