@@ -193,3 +193,9 @@ export class OrganizacaoData extends foundry.abstract.TypeDataModel {
     return { ...definitionBaseFields() };
   }
 }
+
+export class CarreiraData extends foundry.abstract.TypeDataModel {
+  static defineSchema() {
+    return { ...definitionBaseFields() };
+  }
+}

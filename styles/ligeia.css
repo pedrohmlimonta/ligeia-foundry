@@ -1310,3 +1310,6 @@
 .lig-macro-bound.off { opacity: 0.5; }
 .lig-macro-name { flex: 1; cursor: pointer; font-weight: 600; }
 .lig-macro-name:hover { text-decoration: underline; }
+
+/* Nota de dificuldade fixa (CD) na rolagem de ação */
+.lig-dc-note { font-size: 0.8rem; color: var(--lig-gold, #c9a84a); }

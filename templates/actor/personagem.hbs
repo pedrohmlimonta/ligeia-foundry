@@ -387,7 +387,7 @@
     <div class="lig-defs-head">
       <span>Definições &amp; Acesso a Listas</span>
     </div>
-    <p class="lig-hint">Raça, herança, vocação e organização concedem acesso a listas de habilidades. Arraste-as para cá ou crie abaixo.</p>
+    <p class="lig-hint">Raça, herança, vocação, carreira e organização concedem acesso a listas de habilidades. Arraste-as para cá ou crie abaixo. (Raça, herança, vocação e carreira são únicas — ao adicionar outra, o sistema pergunta se deseja substituir.)</p>
     <div class="lig-defs-grid">
       {{#each itemGroups.raca as |item|}}
       <div class="lig-item-entry def" data-item-id="{{item.id}}" draggable="true">
@@ -413,6 +413,14 @@
         {{#if ../editable}}<button type="button" class="lig-mini-btn danger" data-action="itemDelete" title="Remover">✕</button>{{/if}}
       </div>
       {{/each}}
+      {{#each itemGroups.carreira as |item|}}
+      <div class="lig-item-entry def" data-item-id="{{item.id}}" draggable="true">
+        <span class="lig-def-kind">Carreira</span>
+        <span class="lig-item-title">{{item.name}}</span>
+        <button type="button" class="lig-mini-btn" data-action="itemEdit" title="Editar">✎</button>
+        {{#if ../editable}}<button type="button" class="lig-mini-btn danger" data-action="itemDelete" title="Remover">✕</button>{{/if}}
+      </div>
+      {{/each}}
       {{#each itemGroups.organizacao as |item|}}
       <div class="lig-item-entry def" data-item-id="{{item.id}}" draggable="true">
         <span class="lig-def-kind">Organização</span>
@@ -427,6 +435,7 @@
       <button type="button" class="lig-mini-btn" data-action="itemCreate" data-type="raca">+ Raça</button>
       <button type="button" class="lig-mini-btn" data-action="itemCreate" data-type="heranca">+ Herança</button>
       <button type="button" class="lig-mini-btn" data-action="itemCreate" data-type="vocacao">+ Vocação</button>
+      <button type="button" class="lig-mini-btn" data-action="itemCreate" data-type="carreira">+ Carreira</button>
       <button type="button" class="lig-mini-btn" data-action="itemCreate" data-type="organizacao">+ Organização</button>
     </div>
     {{/if}}

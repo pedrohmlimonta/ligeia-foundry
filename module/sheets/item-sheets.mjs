@@ -456,6 +456,7 @@ class LigeiaItemSheetBase extends HandlebarsApplicationMixin(ItemSheetV2) {
   static async _onAddAction() {
     await this._appendToArray("system.actions", {
       label: "Ação", canRoll: true, rollAttr: "forca", rollBonus: 0, rollDice: 0,
+      vsDifficulty: false, fixedDifficulty: 8,
       targetMode: "target", includeSelf: false, defenseAttr: "esquiva", defenseAttr2: "",
       damage: "", damageType: "", damageResource: "hp", scalingDamage: false,
       appliesEffects: [], range: 0, area: 0, costMp: 0, costHp: 0, costHeroic: 0,

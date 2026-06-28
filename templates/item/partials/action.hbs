@@ -17,11 +17,24 @@
 
     <label class="lig-inline-check">
       <input type="checkbox" name="system.actions.{{i}}.canRoll" {{checked act.canRoll}}/>
-      Faz rolagem de ataque
+      Faz rolagem de ataque (contra a defesa do alvo)
     </label>
 
+    <label class="lig-inline-check">
+      <input type="checkbox" name="system.actions.{{i}}.vsDifficulty" {{checked act.vsDifficulty}}/>
+      Faz rolagem contra dificuldade fixa (CD)
+    </label>
+    {{#if act.vsDifficulty}}
     <div class="lig-item-row">
-      <label>Atributo de ataque
+      <label>Dificuldade fixa (CD)
+        <input type="number" name="system.actions.{{i}}.fixedDifficulty" value="{{act.fixedDifficulty}}" min="0"/>
+      </label>
+    </div>
+    {{/if}}
+    <p class="lig-hint">Se ataque e CD estiverem marcados juntos, a ação precisa superar a defesa do alvo <em>e</em> a CD. Marque só um para usar apenas aquele.</p>
+
+    <div class="lig-item-row">
+      <label>Atributo da rolagem
         <select name="system.actions.{{i}}.rollAttr">{{selectOptions ../attackAttrs selected=act.rollAttr}}</select>
       </label>
       <label>Bônus

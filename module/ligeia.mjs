@@ -23,6 +23,7 @@ import {
   HerancaData,
   VocacaoData,
   OrganizacaoData,
+  CarreiraData,
 } from "./data/item-data.mjs";
 
 /* ------------------------------------------------------------------ */
@@ -64,6 +65,7 @@ Hooks.once("init", function () {
     heranca: HerancaData,
     vocacao: VocacaoData,
     organizacao: OrganizacaoData,
+    carreira: CarreiraData,
   };
 
   // Constantes do sistema (palavras arcanas, custos de XP, etc.)
@@ -244,7 +246,7 @@ Hooks.once("init", function () {
     types: ["traco"], makeDefault: true, label: "Ligeia — Traço",
   });
   DSC.registerSheet(Item, "ligeia-rpg", DefinicaoSheet, {
-    types: ["raca", "heranca", "vocacao", "organizacao"],
+    types: ["raca", "heranca", "vocacao", "organizacao", "carreira"],
     makeDefault: true, label: "Ligeia — Definição",
   });
 
@@ -269,38 +271,77 @@ Hooks.once("ready", function () {
 });
 
 /* ------------------------------------------------------------------ */
-/*  Definições únicas: o personagem só pode ter UMA raça, UMA herança  */
-/*  e UMA vocação. Organizações são livres (várias permitidas).        */
-/*  Ao adicionar uma nova definição de tipo único, a anterior é        */
-/*  removida automaticamente (substituição).                           */
+/*  Definições únicas: o personagem só pode ter UMA raça, UMA herança, */
+/*  UMA vocação e UMA carreira. Organizações são livres.               */
+/*  Ao tentar adicionar uma segunda do mesmo tipo, pergunta (Sim/Não)  */
+/*  se deseja substituir. Não → mantém a atual e não adiciona.         */
+/*  Sim → remove a atual e adiciona a nova.                            */
 /* ------------------------------------------------------------------ */
-const UNIQUE_DEFINITION_TYPES = ["raca", "heranca", "vocacao"];
+const UNIQUE_DEFINITION_TYPES = ["raca", "heranca", "vocacao", "carreira"];
+const UNIQUE_DEFINITION_LABELS = { raca: "raça", heranca: "herança", vocacao: "vocação", carreira: "carreira" };
 
 Hooks.on("preCreateItem", function (item, data, options, userId) {
   const parent = item.parent; // o Actor, se embutido
   if (!parent || parent.documentName !== "Actor") return;
   if (!UNIQUE_DEFINITION_TYPES.includes(item.type)) return;
+  // Se esta criação já foi autorizada pelo diálogo de substituição, deixa passar.
+  if (options.ligeiaConfirmedReplace) return;
 
-  // Já existe uma definição do mesmo tipo? Marca para remover depois da criação.
   const existing = parent.items.filter((i) => i.type === item.type);
-  if (existing.length) {
-    options.ligeiaReplaceUnique = existing.map((i) => i.id);
-    const label = { raca: "raça", heranca: "herança", vocacao: "vocação" }[item.type] || item.type;
-    ui.notifications?.info(`Substituindo a ${label} anterior de ${parent.name}.`);
-  }
+  if (!existing.length) return; // não há conflito, criação normal
+
+  // Já existe uma do mesmo tipo: CANCELA esta criação e abre o diálogo.
+  // (preCreateItem é síncrono, então tratamos a confirmação fora dele.)
+  const label = UNIQUE_DEFINITION_LABELS[item.type] || item.type;
+  promptReplaceUniqueDefinition(parent, item, data, existing, label);
+  return false; // impede a criação automática
 });
 
-Hooks.on("createItem", async function (item, options, userId) {
-  // Só o usuário que criou processa a remoção, e só se houver itens a remover.
-  if (game.user?.id !== userId) return;
-  const parent = item.parent;
-  if (!parent || parent.documentName !== "Actor") return;
-  const toRemove = options.ligeiaReplaceUnique;
-  if (!Array.isArray(toRemove) || !toRemove.length) return;
-  // Remove as definições antigas do mesmo tipo (mantém só a recém-criada).
-  const ids = toRemove.filter((id) => id !== item.id && parent.items.has(id));
-  if (ids.length) await parent.deleteEmbeddedDocuments("Item", ids);
-});
+/**
+ * Abre uma caixa Sim/Não perguntando se o usuário quer substituir a
+ * definição única atual (raça/herança/vocação/carreira). Se sim, remove a
+ * antiga e cria a nova; se não, não faz nada.
+ */
+async function promptReplaceUniqueDefinition(actor, item, data, existing, label) {
+  const currentName = existing[0]?.name || `(${label} atual)`;
+  const newName = item.name || data?.name || `nova ${label}`;
+  const DialogV2 = foundry.applications?.api?.DialogV2;
+
+  let confirmed = false;
+  try {
+    if (DialogV2?.confirm) {
+      confirmed = await DialogV2.confirm({
+        window: { title: `Substituir ${label}?` },
+        content: `<p>${actor.name} já tem a ${label} <strong>${currentName}</strong>.</p>
+                  <p>Deseja substituí-la por <strong>${newName}</strong>?</p>`,
+        yes: { label: "Sim, substituir" },
+        no: { label: "Não, manter atual" },
+        modal: true,
+      });
+    } else {
+      // Fallback para o Dialog clássico.
+      confirmed = await Dialog.confirm({
+        title: `Substituir ${label}?`,
+        content: `<p>${actor.name} já tem a ${label} <strong>${currentName}</strong>.</p>
+                  <p>Deseja substituí-la por <strong>${newName}</strong>?</p>`,
+      });
+    }
+  } catch (e) {
+    confirmed = false; // se o diálogo for fechado/cancelado, não substitui
+  }
+
+  if (!confirmed) {
+    ui.notifications?.info(`${label.charAt(0).toUpperCase() + label.slice(1)} mantida: ${currentName}.`);
+    return;
+  }
+
+  // Remove a(s) antiga(s) e cria a nova (autorizando a criação no hook).
+  const ids = existing.map((i) => i.id).filter((id) => actor.items.has(id));
+  if (ids.length) await actor.deleteEmbeddedDocuments("Item", ids);
+  const createData = foundry.utils.deepClone(data);
+  await actor.createEmbeddedDocuments("Item", [createData], { ligeiaConfirmedReplace: true });
+  ui.notifications?.info(`${label.charAt(0).toUpperCase() + label.slice(1)} substituída por ${newName}.`);
+}
 
 /* ------------------------------------------------------------------ */
 /*  Preload de templates parciais                                      */

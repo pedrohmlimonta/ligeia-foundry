@@ -10,7 +10,8 @@
       "Raca": "Raça",
       "Heranca": "Herança",
       "Vocacao": "Vocação",
-      "Organizacao": "Organização"
+      "Organizacao": "Organização",
+      "Carreira": "Carreira"
     },
     "Attr": {
       "forca": "Força",
@@ -46,7 +47,8 @@
       "raca": "Raça",
       "heranca": "Herança",
       "vocacao": "Vocação",
-      "organizacao": "Organização"
+      "organizacao": "Organização",
+      "carreira": "Carreira"
     }
   }
 }

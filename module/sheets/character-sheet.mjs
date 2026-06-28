@@ -134,6 +134,7 @@ export class LigeiaCharacterSheet extends HandlebarsApplicationMixin(ActorSheetV
       heranca: [],
       vocacao: [],
       organizacao: [],
+      carreira: [],
     };
     for (const item of actor.items) {
       if (groups[item.type]) groups[item.type].push(item);
@@ -329,7 +330,7 @@ export class LigeiaCharacterSheet extends HandlebarsApplicationMixin(ActorSheetV
 
     // Se for uma DEFINIÇÃO (raça/herança/vocação/organização) que concede
     // traços, cria também esses traços como itens embutidos.
-    const defTypes = ["raca", "heranca", "vocacao", "organizacao"];
+    const defTypes = ["raca", "heranca", "vocacao", "organizacao", "carreira"];
     if (defTypes.includes(item.type)) {
       const granted = item.system?.grantedTraits || [];
       for (const t of granted) {
@@ -587,6 +588,7 @@ export class LigeiaCharacterSheet extends HandlebarsApplicationMixin(ActorSheetV
       heranca: "Nova Herança",
       vocacao: "Nova Vocação",
       organizacao: "Nova Organização",
+      carreira: "Nova Carreira",
     };
     await this.document.createEmbeddedDocuments("Item", [
       { name: names[type] || "Novo Item", type },

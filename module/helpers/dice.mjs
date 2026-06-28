@@ -636,8 +636,12 @@ export async function rollItemAction({ actor, item, action, hidden = false, over
   // Modificadores de condição do ATACANTE
   const atkCond = conditionModifiers(actor);
 
+  // A ação rola se faz ataque OU se testa contra dificuldade fixa.
+  const rollsDice = action.canRoll || action.vsDifficulty;
+  const fixedDC = action.vsDifficulty ? (Number(action.fixedDifficulty) || 0) : null;
+
   let atkRoll = null;
-  if (action.canRoll) {
+  if (rollsDice) {
     const atk = resolveAttr(actor, atkKey);
     // Modificadores de categoria de rolagem do atacante (all + attack)
     const rm = actor.system?.rollMods || {};
@@ -649,7 +653,8 @@ export async function rollItemAction({ actor, item, action, hidden = false, over
       attribute: atk.value,
       improvement: atk.dice + (Number(action.rollDice) || 0) + atkCond.atkDice + rmDice,
       bonus: (Number(action.rollBonus) || 0) + rmBonus,
-      difficulty: null,
+      // Passa a CD fixa (quando houver) para marcar sucesso/falha e crítico.
+      difficulty: fixedDC,
       reroll1: atkRr.reroll1,
       reroll6: atkRr.reroll6,
       critBonus: atkCrit.critBonus,
@@ -659,6 +664,8 @@ export async function rollItemAction({ actor, item, action, hidden = false, over
   }
   const atkLabel = (cfg.attackAttrs?.[atkKey]) || atkKey;
   const atkTotal = atkRoll ? atkRoll.total : 0;
+  // A ação passou na dificuldade fixa? (só relevante se vsDifficulty)
+  const passedDC = fixedDC == null ? true : atkTotal >= fixedDC;
   const atkCondNote = atkCond.atkDice ? ` <span class="lig-cond-note">(${atkCond.atkDice}D por condição)</span>` : "";
 
   // Rola dano (uma vez; aplicado a cada alvo afetado)
@@ -708,8 +715,14 @@ export async function rollItemAction({ actor, item, action, hidden = false, over
   // mode "none": nenhum alvo
 
   // Cabeçalho do ataque (atacante) — usado na 1ª mensagem.
+  // Quando a ação testa contra CD fixa e NÃO há alvos com defesa, mostra o
+  // resultado do teste (sucesso/falha) já no cabeçalho.
+  const showDCInHeader = fixedDC != null && !(action.canRoll && (mode === "target" || mode === "area" || mode === "aura") && affected.some((x) => !x.isSelf));
+  const dcHeader = showDCInHeader
+    ? ` <span class="lig-dc-note">vs CD ${fixedDC}: ${passedDC ? '<span class="lig-outcome ok">Sucesso!</span>' : '<span class="lig-outcome ko">Falhou</span>'}</span>`
+    : "";
   const atkHeader = atkRoll
-    ? `<span class="lig-atk-attr">${atkLabel} → ${atkRoll.total}${atkCondNote}</span>
+    ? `<span class="lig-atk-attr">${atkLabel} → ${atkRoll.total}${atkCondNote}${dcHeader}</span>
        ${atkRoll.isCritSuccess ? '<span class="ligeia-crit success">✦ Crítico ✦</span>' : ""}
        ${atkRoll.isCritFail ? '<span class="ligeia-crit fail">✗ Falha Crítica ✗</span>' : ""}`
     : "";
@@ -743,8 +756,7 @@ export async function rollItemAction({ actor, item, action, hidden = false, over
   // ---- Resolve cada alvo afetado ----
   if (affected.length) {
     for (const { actor: tActor, isSelf } of affected) {
-      // O próprio personagem (self) e modos sem defesa não rolam defesa.
-      // Há defesa quando: a ação rola E o modo é target/area/aura E não é o self.
+      // Há defesa quando: a ação faz ATAQUE E o modo é target/area/aura E não é o self.
       const needsDefense = action.canRoll && !isSelf && (mode === "target" || mode === "area" || mode === "aura");
 
       let defTotal = NaN;
@@ -790,7 +802,9 @@ export async function rollItemAction({ actor, item, action, hidden = false, over
         });
         defRolls.push(defRoll.roll);
         defTotal = defRoll.total;
-        acertou = defRoll.total < atkTotal;
+        // Supera a defesa E (se houver) a dificuldade fixa.
+        const beatDefense = defRoll.total < atkTotal;
+        acertou = beatDefense && passedDC;
         const defLabel = (cfg.defenseAttrs?.[def.key]) || def.key;
         // Notas de condição na defesa
         const condBits = [];
@@ -800,7 +814,19 @@ export async function rollItemAction({ actor, item, action, hidden = false, over
           condBits.push("sem Bloqueio");
         }
         const condNote = condBits.length ? ` <span class="lig-cond-note">(${condBits.join(", ")})</span>` : "";
-        defInfo = ` — defesa ${defLabel}${chooseNote}: ${defRoll.total}${condNote} ${acertou ? '<span class="lig-outcome ok">Acertou!</span>' : '<span class="lig-outcome ko">Defendeu</span>'}`;
+        // Nota da CD fixa quando também é exigida
+        const dcNote = fixedDC != null
+          ? ` <span class="lig-dc-note">[CD ${fixedDC}: ${passedDC ? "ok" : "falhou"}]</span>`
+          : "";
+        let outcomeTag;
+        if (acertou) outcomeTag = '<span class="lig-outcome ok">Acertou!</span>';
+        else if (!beatDefense) outcomeTag = '<span class="lig-outcome ko">Defendeu</span>';
+        else outcomeTag = '<span class="lig-outcome ko">Não superou a CD</span>';
+        defInfo = ` — defesa ${defLabel}${chooseNote}: ${defRoll.total}${condNote}${dcNote} ${outcomeTag}`;
+      } else if (fixedDC != null) {
+        // Sem defesa, mas testa contra dificuldade fixa.
+        acertou = passedDC;
+        defInfo = ` — CD ${fixedDC}: ${atkTotal} ${passedDC ? '<span class="lig-outcome ok">Sucesso!</span>' : '<span class="lig-outcome ko">Falhou</span>'}`;
       } else {
         defInfo = isSelf ? ' <span class="lig-outcome self">(em si)</span>' : ' <span class="lig-outcome ok">(automático)</span>';
       }

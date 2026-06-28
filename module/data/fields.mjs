@@ -107,6 +107,11 @@ export function actionEntryField() {
     rollAttr: new fields.StringField({ blank: true, initial: "forca" }),
     rollBonus: new fields.NumberField({ initial: 0, integer: true }),
     rollDice: new fields.NumberField({ initial: 0, integer: true, min: 0 }),
+    // Rolagem contra dificuldade FIXA (CD). Pode coexistir com a rolagem de
+    // ataque: quando ambas ativas, a ação precisa superar a defesa do alvo E
+    // a CD fixa. Quando só esta está ativa, basta superar a CD.
+    vsDifficulty: new fields.BooleanField({ initial: false }),
+    fixedDifficulty: new fields.NumberField({ initial: 8, integer: true, min: 0 }),
     targetMode: new fields.StringField({
       required: true,
       initial: "target",
