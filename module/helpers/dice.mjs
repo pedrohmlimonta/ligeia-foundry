@@ -611,7 +611,7 @@ async function executeActionMacro({ actor, item, action, overrideTargets = null 
   }
 }
 
-export async function rollItemAction({ actor, item, action, hidden = false, overrideTargets = null }) {
+export async function rollItemAction({ actor, item, action, hidden = false, overrideTargets = null, frozenAttackTotal = null }) {
   const cfg = CONFIG.LIGEIA || {};
   // Compatibilidade: se nenhuma ação for passada, usa a primeira do item.
   if (!action) action = (item.system.actions || [])[0];
@@ -625,6 +625,10 @@ export async function rollItemAction({ actor, item, action, hidden = false, over
   const lines = [];
   const atkRolls = []; // ataque + dano (1ª mensagem)
   const defRolls = []; // defesas dos alvos (2ª mensagem)
+
+  // Modo "ataque congelado": disparos por turno de uma emanação NÃO re-rolam
+  // o ataque; usam o total da rolagem feita na criação da área como CD.
+  const isFrozen = frozenAttackTotal != null;
 
   // Gasta os custos da ação (PM/PV/PH) do executor.
   const costText = await spendActionCosts(actor, action);
@@ -641,7 +645,7 @@ export async function rollItemAction({ actor, item, action, hidden = false, over
   const fixedDC = action.vsDifficulty ? (Number(action.fixedDifficulty) || 0) : null;
 
   let atkRoll = null;
-  if (rollsDice) {
+  if (rollsDice && !isFrozen) {
     const atk = resolveAttr(actor, atkKey);
     // Modificadores de categoria de rolagem do atacante (all + attack)
     const rm = actor.system?.rollMods || {};
@@ -663,7 +667,8 @@ export async function rollItemAction({ actor, item, action, hidden = false, over
     atkRolls.push(atkRoll.roll);
   }
   const atkLabel = (cfg.attackAttrs?.[atkKey]) || atkKey;
-  const atkTotal = atkRoll ? atkRoll.total : 0;
+  // Total do ataque: o congelado (emanação por turno) ou o recém-rolado.
+  const atkTotal = isFrozen ? Number(frozenAttackTotal) || 0 : (atkRoll ? atkRoll.total : 0);
 
   // Dificuldade fixa: a CD efetiva por alvo pode somar um atributo do alvo.
   // "nenhum" (ou vazio) = só a CD base. Calculada por alvo dentro do loop.
@@ -744,7 +749,9 @@ export async function rollItemAction({ actor, item, action, hidden = false, over
     ? `<span class="lig-atk-attr">${atkLabel} → ${atkRoll.total}${atkCondNote}${dcHeader}</span>
        ${atkRoll.isCritSuccess ? '<span class="ligeia-crit success">✦ Crítico ✦</span>' : ""}
        ${atkRoll.isCritFail ? '<span class="ligeia-crit fail">✗ Falha Crítica ✗</span>' : ""}`
-    : "";
+    : (isFrozen
+        ? `<span class="lig-atk-attr lig-emanation-tag">Emanação · CD ${atkTotal} (ataque da criação)</span>`
+        : "");
   const speaker = ChatMessage.getSpeaker({ actor });
   const whisperData = hidden
     ? { whisper: ChatMessage.getWhisperRecipients("GM"), blind: true }
@@ -877,7 +884,8 @@ export async function rollItemAction({ actor, item, action, hidden = false, over
         <span class="lig-act-name">${item.name} — ${action.label || "Ação"} · resultado (ataque ${atkRoll.total})</span>
         ${lines.join("")}
       </div>`;
-    return ChatMessage.create({ speaker, flavor: defFlavor, rolls: defRolls, sound: CONFIG.sounds.dice, ...whisperData });
+    const msg = await ChatMessage.create({ speaker, flavor: defFlavor, rolls: defRolls, sound: CONFIG.sounds.dice, ...whisperData });
+    return { message: msg, atkTotal, atkRolled: !!atkRoll };
   }
 
   // Caso sem defesa: uma mensagem única com tudo.
@@ -889,5 +897,6 @@ export async function rollItemAction({ actor, item, action, hidden = false, over
       ${atkHeader}
       ${lines.join("")}
     </div>`;
-  return ChatMessage.create({ speaker, flavor, rolls: [...atkRolls, ...defRolls], sound: CONFIG.sounds.dice, ...whisperData });
+  const msg = await ChatMessage.create({ speaker, flavor, rolls: [...atkRolls, ...defRolls], sound: CONFIG.sounds.dice, ...whisperData });
+  return { message: msg, atkTotal, atkRolled: !!atkRoll };
 }

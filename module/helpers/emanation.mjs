@@ -84,12 +84,17 @@ async function triggerEmanationOn(ema, targetActor) {
   turnAction.targetMode = "target";
   turnAction.persistArea = false;
 
+  // A rolagem de ataque foi feita UMA vez, na criação da área. Aqui o alvo
+  // apenas rola defesa contra esse total congelado (a CD da emanação).
+  const frozen = (ema.attackTotal != null) ? Number(ema.attackTotal) : null;
+
   await rollItemAction({
     actor,
     item,
     action: turnAction,
     overrideTargets: [targetActor],
     hidden: actor.system?.rollHidden ?? false,
+    frozenAttackTotal: frozen,
   });
 }
 
@@ -146,17 +151,25 @@ async function handleRoundAdvance(combat) {
 /**
  * Move as auras (emanações que seguem o token) quando o token de origem se
  * move. Áreas fixas não se movem.
+ *
+ * IMPORTANTE: a posição é lida do parâmetro `dest` (vinda do objeto `changed`
+ * do hook), porque nesta build, ao disparar `updateToken`, `tokenDoc.x/y`
+ * ainda podem refletir a posição de PARTIDA — o que fazia a aura seguir o
+ * ponto de onde o token saiu, em vez de onde parou.
  */
-async function handleTokenMove(tokenDoc) {
+async function handleTokenMove(tokenDoc, dest) {
   const scene = tokenDoc.parent;
   if (!scene) return;
+  const gridSize = scene.grid?.size || canvas.grid?.size || 100;
+  const x = dest?.x ?? tokenDoc.x ?? 0;
+  const y = dest?.y ?? tokenDoc.y ?? 0;
   const updates = [];
   for (const template of emanationTemplates(scene)) {
     const ema = emanationOf(template);
     if (!ema?.isAura) continue;
     if (ema.sourceTokenId !== tokenDoc.id) continue;
-    const cx = (tokenDoc.x ?? 0) + ((tokenDoc.width ?? 1) * canvas.grid.size) / 2;
-    const cy = (tokenDoc.y ?? 0) + ((tokenDoc.height ?? 1) * canvas.grid.size) / 2;
+    const cx = x + ((tokenDoc.width ?? 1) * gridSize) / 2;
+    const cy = y + ((tokenDoc.height ?? 1) * gridSize) / 2;
     updates.push({ _id: template.id, x: cx, y: cy });
   }
   if (updates.length) await scene.updateEmbeddedDocuments("MeasuredTemplate", updates);
@@ -193,11 +206,32 @@ export function registerEmanationHooks() {
     }
   });
 
-  // Aura segue o token de origem.
+  // Aura segue o token de origem. Lê o destino do objeto `changed` (e não de
+  // tokenDoc.x/y, que pode ainda estar na posição de partida no momento do
+  // hook). Se houver animação de movimento, espera ela terminar para a aura
+  // acompanhar junto com o token, em vez de "pular" para o destino.
   Hooks.on("updateToken", async (tokenDoc, changed, options, userId) => {
     if (!isResponsibleClient()) return;
     if (!("x" in changed) && !("y" in changed)) return;
-    await handleTokenMove(tokenDoc);
+    const dest = { x: changed.x, y: changed.y };
+
+    // Se esta aura não pertence a este token, nem espera animação.
+    const followsThis = emanationTemplates(tokenDoc.parent).some(
+      (t) => emanationOf(t)?.isAura && emanationOf(t)?.sourceTokenId === tokenDoc.id
+    );
+    if (!followsThis) return;
+
+    // Aguarda a animação do token (se houver) para mover a aura junto.
+    try {
+      const obj = tokenDoc.object;
+      if (obj && options?.animate !== false && typeof CanvasAnimation !== "undefined") {
+        const name = obj.animationName || `Token.${tokenDoc.id}.animate`;
+        const anim = CanvasAnimation.getAnimation?.(name);
+        if (anim?.promise) await anim.promise;
+      }
+    } catch (e) { /* sem animação disponível; segue */ }
+
+    await handleTokenMove(tokenDoc, dest);
   });
 
   // Limpeza: ao encerrar o combate, remove as emanações de duração por rodada.

@@ -1320,3 +1320,6 @@
   border: 1px solid var(--lig-border, #5a4a2a); border-radius: 4px;
   background: rgba(201, 168, 74, 0.04);
 }
+
+/* Tag de emanação no chat */
+.lig-emanation-tag { color: var(--lig-gold, #c9a84a); font-style: italic; }

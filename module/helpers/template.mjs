@@ -91,6 +91,10 @@ function buildEmanationFlags(actor, item, action) {
     sourceTokenId: token?.id || null,
     affectsSelf: !!action.persistAffectsSelf,
     radius: Number(action.area) || 0,
+    // Total do ataque rolado na CRIAÇÃO (congelado). Preenchido logo após a
+    // primeira rolagem; usado como CD das defesas por turno. null = ainda não
+    // rolado (ou ação sem ataque).
+    attackTotal: null,
     // Duração: rounds>0 = N rodadas; 0 = até o fim da cena.
     rounds: Number(action.persistRounds) || 0,
     // Rodada do combate em que foi criada (para expiração).
@@ -238,13 +242,13 @@ export async function placeTemplateForAction(actor, item, action) {
   try {
     if (mode === "aura") {
       const res = await placeAuraTemplate(actor, radius, persistFlags);
-      return { proceed: true, actors: (res?.actors) || [] };
+      return { proceed: true, actors: (res?.actors) || [], templateId: res?.templateId || null };
     } else {
       const res = await placeAreaTemplate(actor, radius, persistFlags);
-      return { proceed: res.ok, actors: res.actors || [] };
+      return { proceed: res.ok, actors: res.actors || [], templateId: res?.templateId || null };
     }
   } catch (e) {
     console.warn("Ligeia | erro ao posicionar template; seguindo sem ele:", e);
-    return { proceed: true, actors: null };
+    return { proceed: true, actors: null, templateId: null };
   }
 }

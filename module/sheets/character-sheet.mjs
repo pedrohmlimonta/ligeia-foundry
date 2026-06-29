@@ -411,16 +411,31 @@ export class LigeiaCharacterSheet extends HandlebarsApplicationMixin(ActorSheetV
 
     // Para ações de área/aura, posiciona o template visual e obtém os atores
     // dentro dele. Se o jogador cancelar o posicionamento, aborta.
-    const { proceed, actors } = await placeTemplateForAction(this.document, item, action);
+    const { proceed, actors, templateId } = await placeTemplateForAction(this.document, item, action);
     if (!proceed) return;
 
-    await rollItemAction({
+    const result = await rollItemAction({
       actor: this.document,
       item,
       action,
       overrideTargets: actors, // null em modos sem template (usa targeting normal)
       hidden: this.document.system.rollHidden ?? false,
     });
+
+    // Emanação contínua: congela o total do ataque da CRIAÇÃO na flag do
+    // template, para os disparos por turno usarem como CD (sem re-rolar).
+    // Só faz sentido quando a ação tem rolagem de ATAQUE real (canRoll); com
+    // CD fixa pura a dificuldade já é constante e não precisa congelar.
+    if (templateId && action.persistArea && action.canRoll && result?.atkRolled && canvas?.scene) {
+      try {
+        const tpl = canvas.scene.templates.get(templateId);
+        if (tpl) {
+          await tpl.setFlag("ligeia-rpg", "emanation.attackTotal", Number(result.atkTotal) || 0);
+        }
+      } catch (e) {
+        console.warn("Ligeia | falha ao congelar ataque da emanação:", e);
+      }
+    }
   }
 
   /** Liga/desliga uma condição na ficha. */
