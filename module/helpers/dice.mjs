@@ -664,7 +664,25 @@ export async function rollItemAction({ actor, item, action, hidden = false, over
   }
   const atkLabel = (cfg.attackAttrs?.[atkKey]) || atkKey;
   const atkTotal = atkRoll ? atkRoll.total : 0;
-  // A ação passou na dificuldade fixa? (só relevante se vsDifficulty)
+
+  // Dificuldade fixa: a CD efetiva por alvo pode somar um atributo do alvo.
+  // "nenhum" (ou vazio) = só a CD base. Calculada por alvo dentro do loop.
+  const dcAttr = action.difficultyAttr || "nenhum";
+  const dcUsesAttr = fixedDC != null && dcAttr && dcAttr !== "nenhum";
+  const dcAttrLabel = dcUsesAttr
+    ? (cfg.attackAttrs?.[dcAttr] || cfg.defenseAttrs?.[dcAttr] || dcAttr)
+    : "";
+  /**
+   * CD efetiva contra um alvo específico (base + atributo do alvo, se houver).
+   * Sem alvo (tActor null) ou "nenhum", retorna a CD base.
+   */
+  const effectiveDCFor = (tActor) => {
+    if (fixedDC == null) return null;
+    if (!dcUsesAttr || !tActor) return fixedDC;
+    const a = resolveAttr(tActor, dcAttr);
+    return fixedDC + (a?.value || 0);
+  };
+  // passedDC base (sem alvo) — usado no cabeçalho de modos sem defesa.
   const passedDC = fixedDC == null ? true : atkTotal >= fixedDC;
   const atkCondNote = atkCond.atkDice ? ` <span class="lig-cond-note">(${atkCond.atkDice}D por condição)</span>` : "";
 
@@ -715,9 +733,10 @@ export async function rollItemAction({ actor, item, action, hidden = false, over
   // mode "none": nenhum alvo
 
   // Cabeçalho do ataque (atacante) — usado na 1ª mensagem.
-  // Quando a ação testa contra CD fixa e NÃO há alvos com defesa, mostra o
-  // resultado do teste (sucesso/falha) já no cabeçalho.
-  const showDCInHeader = fixedDC != null && !(action.canRoll && (mode === "target" || mode === "area" || mode === "aura") && affected.some((x) => !x.isSelf));
+  // Mostra o resultado da CD no cabeçalho apenas quando NÃO há alvos
+  // afetados (ex.: modo "Nenhum", ou nenhum alvo selecionado). Havendo
+  // alvos, cada um exibe sua própria CD efetiva na linha do alvo.
+  const showDCInHeader = fixedDC != null && affected.length === 0;
   const dcHeader = showDCInHeader
     ? ` <span class="lig-dc-note">vs CD ${fixedDC}: ${passedDC ? '<span class="lig-outcome ok">Sucesso!</span>' : '<span class="lig-outcome ko">Falhou</span>'}</span>`
     : "";
@@ -802,9 +821,11 @@ export async function rollItemAction({ actor, item, action, hidden = false, over
         });
         defRolls.push(defRoll.roll);
         defTotal = defRoll.total;
-        // Supera a defesa E (se houver) a dificuldade fixa.
+        // Supera a defesa E (se houver) a dificuldade fixa (CD efetiva do alvo).
         const beatDefense = defRoll.total < atkTotal;
-        acertou = beatDefense && passedDC;
+        const tgtDC = effectiveDCFor(tActor);
+        const passedTgtDC = tgtDC == null ? true : atkTotal >= tgtDC;
+        acertou = beatDefense && passedTgtDC;
         const defLabel = (cfg.defenseAttrs?.[def.key]) || def.key;
         // Notas de condição na defesa
         const condBits = [];
@@ -814,9 +835,10 @@ export async function rollItemAction({ actor, item, action, hidden = false, over
           condBits.push("sem Bloqueio");
         }
         const condNote = condBits.length ? ` <span class="lig-cond-note">(${condBits.join(", ")})</span>` : "";
-        // Nota da CD fixa quando também é exigida
-        const dcNote = fixedDC != null
-          ? ` <span class="lig-dc-note">[CD ${fixedDC}: ${passedDC ? "ok" : "falhou"}]</span>`
+        // Nota da CD fixa quando também é exigida (mostra a CD efetiva e, se
+        // somou atributo do alvo, detalha base + atributo).
+        const dcNote = tgtDC != null
+          ? ` <span class="lig-dc-note">[CD ${tgtDC}${dcUsesAttr ? ` = ${fixedDC}+${dcAttrLabel}` : ""}: ${passedTgtDC ? "ok" : "falhou"}]</span>`
           : "";
         let outcomeTag;
         if (acertou) outcomeTag = '<span class="lig-outcome ok">Acertou!</span>';
@@ -824,9 +846,12 @@ export async function rollItemAction({ actor, item, action, hidden = false, over
         else outcomeTag = '<span class="lig-outcome ko">Não superou a CD</span>';
         defInfo = ` — defesa ${defLabel}${chooseNote}: ${defRoll.total}${condNote}${dcNote} ${outcomeTag}`;
       } else if (fixedDC != null) {
-        // Sem defesa, mas testa contra dificuldade fixa.
-        acertou = passedDC;
-        defInfo = ` — CD ${fixedDC}: ${atkTotal} ${passedDC ? '<span class="lig-outcome ok">Sucesso!</span>' : '<span class="lig-outcome ko">Falhou</span>'}`;
+        // Sem defesa, mas testa contra dificuldade fixa (CD efetiva do alvo).
+        const tgtDC = effectiveDCFor(tActor);
+        const passedTgtDC = atkTotal >= tgtDC;
+        acertou = passedTgtDC;
+        const dcDetail = dcUsesAttr ? ` (${fixedDC}+${dcAttrLabel})` : "";
+        defInfo = ` — CD ${tgtDC}${dcDetail}: ${atkTotal} ${passedTgtDC ? '<span class="lig-outcome ok">Sucesso!</span>' : '<span class="lig-outcome ko">Falhou</span>'}`;
       } else {
         defInfo = isSelf ? ' <span class="lig-outcome self">(em si)</span>' : ' <span class="lig-outcome ok">(automático)</span>';
       }

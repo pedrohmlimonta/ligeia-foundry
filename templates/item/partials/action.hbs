@@ -29,7 +29,11 @@
       <label>Dificuldade fixa (CD)
         <input type="number" name="system.actions.{{i}}.fixedDifficulty" value="{{act.fixedDifficulty}}" min="0"/>
       </label>
+      <label>Somar atributo do alvo à CD
+        <select name="system.actions.{{i}}.difficultyAttr">{{selectOptions ../difficultyAttrChoices selected=act.difficultyAttr}}</select>
+      </label>
     </div>
+    <p class="lig-hint">A CD efetiva contra cada alvo = CD fixa + o atributo escolhido do alvo. Use "Nenhum" para uma CD fixa pura. (Sem alvo, só a CD fixa vale.)</p>
     {{/if}}
     <p class="lig-hint">Se ataque e CD estiverem marcados juntos, a ação precisa superar a defesa do alvo <em>e</em> a CD. Marque só um para usar apenas aquele.</p>
 

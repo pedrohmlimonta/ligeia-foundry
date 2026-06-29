@@ -112,6 +112,10 @@ export function actionEntryField() {
     // a CD fixa. Quando só esta está ativa, basta superar a CD.
     vsDifficulty: new fields.BooleanField({ initial: false }),
     fixedDifficulty: new fields.NumberField({ initial: 8, integer: true, min: 0 }),
+    // Atributo do ALVO somado à dificuldade fixa (a CD efetiva = CD fixa +
+    // atributo do alvo). "nenhum" = não soma nada. Inclui especiais
+    // (conjuração, iniciativa, esquiva, bloqueio) e os primários.
+    difficultyAttr: new fields.StringField({ blank: true, initial: "nenhum" }),
     targetMode: new fields.StringField({
       required: true,
       initial: "target",

@@ -188,6 +188,21 @@ class LigeiaItemSheetBase extends HandlebarsApplicationMixin(ItemSheetV2) {
     // Opções para o bloco de AÇÃO (ataque/defesa/dano)
     context.attackAttrs = CONFIG.LIGEIA?.attackAttrs || {};
     context.defenseAttrs = CONFIG.LIGEIA?.defenseAttrs || {};
+    // Atributos do alvo que podem ser somados à dificuldade fixa. Inclui
+    // "nenhum" + primários + especiais (conjuração, iniciativa, esquiva,
+    // bloqueio). "iniciativa" não está em attackAttrs, então é incluída aqui.
+    context.difficultyAttrChoices = {
+      nenhum: "Nenhum",
+      forca: "Força",
+      agilidade: "Agilidade",
+      vigor: "Vigor",
+      mente: "Mente",
+      percepcao: "Percepção",
+      conjuracao: "Conjuração",
+      iniciativa: "Iniciativa",
+      esquiva: "Esquiva",
+      bloqueio: "Bloqueio",
+    };
     context.damageTypes = CONFIG.LIGEIA?.damageTypes || {};
     // Tipos de dano + opção "qualquer" para o seletor de RD nos efeitos
     context.damageTypesWithAny = { "": "Qualquer", ...(CONFIG.LIGEIA?.damageTypes || {}) };
@@ -456,7 +471,7 @@ class LigeiaItemSheetBase extends HandlebarsApplicationMixin(ItemSheetV2) {
   static async _onAddAction() {
     await this._appendToArray("system.actions", {
       label: "Ação", canRoll: true, rollAttr: "forca", rollBonus: 0, rollDice: 0,
-      vsDifficulty: false, fixedDifficulty: 8,
+      vsDifficulty: false, fixedDifficulty: 8, difficultyAttr: "nenhum",
       targetMode: "target", includeSelf: false, defenseAttr: "esquiva", defenseAttr2: "",
       damage: "", damageType: "", damageResource: "hp", scalingDamage: false,
       appliesEffects: [], range: 0, area: 0, costMp: 0, costHp: 0, costHeroic: 0,
