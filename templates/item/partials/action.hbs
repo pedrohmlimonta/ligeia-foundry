@@ -91,7 +91,20 @@
           Afeta também a fonte
         </label>
       </div>
-      <p class="lig-hint">{{#if (eq act.targetMode "aura")}}A aura segue o token de origem.{{else}}A área fica fixa no ponto escolhido.{{/if}} Requer um combate ativo para o disparo por turno.</p>
+      <div class="lig-item-row">
+        <label>Quando afeta o personagem
+          <select name="system.actions.{{i}}.persistTrigger">
+            <option value="both" {{#if (eq act.persistTrigger "both")}}selected{{/if}}>Ao iniciar o turno dentro E ao entrar</option>
+            <option value="turn" {{#if (eq act.persistTrigger "turn")}}selected{{/if}}>Só ao iniciar o turno dentro</option>
+            <option value="enter" {{#if (eq act.persistTrigger "enter")}}selected{{/if}}>Só ao entrar na área</option>
+          </select>
+        </label>
+        <label class="lig-inline-check" title="Se marcado, a rolagem de ataque é refeita a cada vez que a emanação afeta alguém. Se desmarcado, usa o ataque rolado na criação como CD fixa.">
+          <input type="checkbox" name="system.actions.{{i}}.persistRerollAttack" {{checked act.persistRerollAttack}}/>
+          Refazer a rolagem de ataque a cada vez
+        </label>
+      </div>
+      <p class="lig-hint">{{#if (eq act.targetMode "aura")}}A aura segue o token de origem.{{else}}A área fica fixa no ponto escolhido.{{/if}} O disparo por turno requer um combate ativo; o disparo "ao entrar" funciona a qualquer momento.</p>
       {{/if}}
     </div>
     {{/if}}

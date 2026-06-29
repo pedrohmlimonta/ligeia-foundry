@@ -184,6 +184,15 @@ export function actionEntryField() {
     persistRounds: new fields.NumberField({ initial: 1, integer: true, min: 0 }),
     // Se a área deve afetar também quem a criou ao iniciar o turno dentro dela.
     persistAffectsSelf: new fields.BooleanField({ initial: false }),
+    // Se true, a rolagem de ataque é REFEITA a cada disparo; se false, usa o
+    // total do ataque rolado na criação (congelado) como CD fixa.
+    persistRerollAttack: new fields.BooleanField({ initial: false }),
+    // Quando a emanação afeta um personagem: ao INICIAR o turno dentro
+    // ("turn"), ao ENTRAR na área ("enter"), ou em ambos ("both").
+    persistTrigger: new fields.StringField({
+      initial: "both",
+      choices: ["turn", "enter", "both"],
+    }),
   });
 }
 

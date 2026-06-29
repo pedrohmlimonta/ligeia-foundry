@@ -90,6 +90,10 @@ function buildEmanationFlags(actor, item, action) {
     isAura: action.targetMode === "aura",
     sourceTokenId: token?.id || null,
     affectsSelf: !!action.persistAffectsSelf,
+    // Se true, refaz a rolagem de ataque a cada disparo (não congela).
+    rerollAttack: !!action.persistRerollAttack,
+    // Gatilho: "turn" (início do turno dentro), "enter" (ao entrar) ou "both".
+    trigger: action.persistTrigger || "both",
     radius: Number(action.area) || 0,
     // Total do ataque rolado na CRIAÇÃO (congelado). Preenchido logo após a
     // primeira rolagem; usado como CD das defesas por turno. null = ainda não

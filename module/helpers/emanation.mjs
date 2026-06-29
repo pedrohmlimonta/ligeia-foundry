@@ -84,9 +84,11 @@ async function triggerEmanationOn(ema, targetActor) {
   turnAction.targetMode = "target";
   turnAction.persistArea = false;
 
-  // A rolagem de ataque foi feita UMA vez, na criação da área. Aqui o alvo
-  // apenas rola defesa contra esse total congelado (a CD da emanação).
-  const frozen = (ema.attackTotal != null) ? Number(ema.attackTotal) : null;
+  // A rolagem de ataque: se a emanação marcar "refazer", rola de novo a cada
+  // disparo (frozen = null). Senão, usa o total congelado na criação como CD.
+  const frozen = ema.rerollAttack
+    ? null
+    : ((ema.attackTotal != null) ? Number(ema.attackTotal) : null);
 
   await rollItemAction({
     actor,
@@ -115,6 +117,9 @@ async function handleTurnStart(combatant) {
   for (const template of emanationTemplates(combatant.parent?.scene)) {
     const ema = emanationOf(template);
     if (!ema) continue;
+    // Só dispara no início do turno se o gatilho incluir "turn".
+    const trig = ema.trigger || "both";
+    if (trig !== "turn" && trig !== "both") continue;
     // A fonte só é afetada se a ação marcar persistAffectsSelf.
     if (!ema.affectsSelf && ema.actorUuid === targetActor.uuid) continue;
     if (!isPointInTemplate(cx, cy, template)) continue;
@@ -175,6 +180,44 @@ async function handleTokenMove(tokenDoc, dest) {
   if (updates.length) await scene.updateEmbeddedDocuments("MeasuredTemplate", updates);
 }
 
+/**
+ * Dispara as emanações em que o token ENTROU com este movimento (centro antes
+ * estava FORA e agora está DENTRO). Usa o gatilho "enter"/"both".
+ * @param {TokenDocument} tokenDoc
+ * @param {{x:number,y:number}} oldCenter  centro antes do movimento
+ * @param {{x:number,y:number}} newCenter  centro após o movimento
+ */
+async function handleTokenEnter(tokenDoc, oldCenter, newCenter) {
+  const scene = tokenDoc.parent;
+  if (!scene || !oldCenter || !newCenter) return;
+  const targetActor = tokenDoc.actor;
+  if (!targetActor) return;
+
+  for (const template of emanationTemplates(scene)) {
+    const ema = emanationOf(template);
+    if (!ema) continue;
+    const trig = ema.trigger || "both";
+    if (trig !== "enter" && trig !== "both") continue;
+    // A fonte só é afetada se marcar persistAffectsSelf.
+    if (!ema.affectsSelf && ema.actorUuid === targetActor.uuid) continue;
+    const wasInside = isPointInTemplate(oldCenter.x, oldCenter.y, template);
+    const nowInside = isPointInTemplate(newCenter.x, newCenter.y, template);
+    // Só dispara na TRANSIÇÃO de fora → dentro (não a cada passo dentro).
+    if (!wasInside && nowInside) {
+      await triggerEmanationOn(ema, targetActor);
+    }
+  }
+}
+
+/** Centro (px) de um token a partir de uma posição (x,y) de canto. */
+function centerFromPos(tokenDoc, x, y, gridSize) {
+  const gs = gridSize || tokenDoc.parent?.grid?.size || canvas.grid?.size || 100;
+  return {
+    x: (x ?? 0) + ((tokenDoc.width ?? 1) * gs) / 2,
+    y: (y ?? 0) + ((tokenDoc.height ?? 1) * gs) / 2,
+  };
+}
+
 /* ------------------------------------------------------------------ */
 /*  Registro dos hooks                                                 */
 /* ------------------------------------------------------------------ */
@@ -206,32 +249,45 @@ export function registerEmanationHooks() {
     }
   });
 
-  // Aura segue o token de origem. Lê o destino do objeto `changed` (e não de
-  // tokenDoc.x/y, que pode ainda estar na posição de partida no momento do
-  // hook). Se houver animação de movimento, espera ela terminar para a aura
-  // acompanhar junto com o token, em vez de "pular" para o destino.
+  // Captura o centro ANTIGO do token antes do movimento (para detectar
+  // entrada na área). O objeto `options` é o mesmo no pre e no update.
+  Hooks.on("preUpdateToken", (tokenDoc, changed, options, userId) => {
+    if (!("x" in changed) && !("y" in changed)) return;
+    options.ligeiaOldCenter = centerFromPos(tokenDoc, tokenDoc.x, tokenDoc.y);
+  });
+
+  // No movimento do token: (1) move as auras que pertencem a ele e (2)
+  // dispara emanações em que ele ENTROU. Lê o destino de `changed` (e não de
+  // tokenDoc.x/y, que pode estar na posição de partida no momento do hook).
   Hooks.on("updateToken", async (tokenDoc, changed, options, userId) => {
     if (!isResponsibleClient()) return;
     if (!("x" in changed) && !("y" in changed)) return;
-    const dest = { x: changed.x, y: changed.y };
 
-    // Se esta aura não pertence a este token, nem espera animação.
+    const gs = tokenDoc.parent?.grid?.size || canvas.grid?.size || 100;
+    const newX = changed.x ?? tokenDoc.x;
+    const newY = changed.y ?? tokenDoc.y;
+    const dest = { x: newX, y: newY };
+    const newCenter = centerFromPos(tokenDoc, newX, newY, gs);
+    const oldCenter = options.ligeiaOldCenter || centerFromPos(tokenDoc, tokenDoc.x, tokenDoc.y, gs);
+
+    // (1) Mover auras que seguem este token (espera a animação terminar).
     const followsThis = emanationTemplates(tokenDoc.parent).some(
       (t) => emanationOf(t)?.isAura && emanationOf(t)?.sourceTokenId === tokenDoc.id
     );
-    if (!followsThis) return;
+    if (followsThis) {
+      try {
+        const obj = tokenDoc.object;
+        if (obj && options?.animate !== false && typeof CanvasAnimation !== "undefined") {
+          const name = obj.animationName || `Token.${tokenDoc.id}.animate`;
+          const anim = CanvasAnimation.getAnimation?.(name);
+          if (anim?.promise) await anim.promise;
+        }
+      } catch (e) { /* sem animação disponível; segue */ }
+      await handleTokenMove(tokenDoc, dest);
+    }
 
-    // Aguarda a animação do token (se houver) para mover a aura junto.
-    try {
-      const obj = tokenDoc.object;
-      if (obj && options?.animate !== false && typeof CanvasAnimation !== "undefined") {
-        const name = obj.animationName || `Token.${tokenDoc.id}.animate`;
-        const anim = CanvasAnimation.getAnimation?.(name);
-        if (anim?.promise) await anim.promise;
-      }
-    } catch (e) { /* sem animação disponível; segue */ }
-
-    await handleTokenMove(tokenDoc, dest);
+    // (2) Detectar ENTRADA em qualquer emanação (gatilho enter/both).
+    await handleTokenEnter(tokenDoc, oldCenter, newCenter);
   });
 
   // Limpeza: ao encerrar o combate, remove as emanações de duração por rodada.

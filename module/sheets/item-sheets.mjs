@@ -476,6 +476,7 @@ class LigeiaItemSheetBase extends HandlebarsApplicationMixin(ItemSheetV2) {
       damage: "", damageType: "", damageResource: "hp", scalingDamage: false,
       appliesEffects: [], range: 0, area: 0, costMp: 0, costHp: 0, costHeroic: 0,
       persistArea: false, persistRounds: 1, persistAffectsSelf: false,
+      persistRerollAttack: false, persistTrigger: "both",
     });
   }
   static async _onRemoveAction(event, target) {
