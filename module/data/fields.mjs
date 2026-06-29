@@ -175,6 +175,15 @@ export function actionEntryField() {
     costMp: new fields.NumberField({ initial: 0, integer: true, min: 0 }),
     costHp: new fields.NumberField({ initial: 0, integer: true, min: 0 }),
     costHeroic: new fields.NumberField({ initial: 0, integer: true, min: 0 }),
+    // --- Área/aura PERSISTENTE (emanação) ---
+    // Quando a ação é de área ou aura, ela pode deixar a área no canvas por
+    // uma duração. Enquanto ativa, todo token que INICIAR o turno dentro da
+    // área refaz a rolagem/efeito da ação automaticamente (emanação contínua).
+    persistArea: new fields.BooleanField({ initial: false }),
+    // Duração da emanação: número de rodadas, ou 0 = até o fim da cena.
+    persistRounds: new fields.NumberField({ initial: 1, integer: true, min: 0 }),
+    // Se a área deve afetar também quem a criou ao iniciar o turno dentro dela.
+    persistAffectsSelf: new fields.BooleanField({ initial: false }),
   });
 }
 

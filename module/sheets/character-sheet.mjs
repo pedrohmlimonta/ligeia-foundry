@@ -411,7 +411,7 @@ export class LigeiaCharacterSheet extends HandlebarsApplicationMixin(ActorSheetV
 
     // Para ações de área/aura, posiciona o template visual e obtém os atores
     // dentro dele. Se o jogador cancelar o posicionamento, aborta.
-    const { proceed, actors } = await placeTemplateForAction(this.document, action);
+    const { proceed, actors } = await placeTemplateForAction(this.document, item, action);
     if (!proceed) return;
 
     await rollItemAction({

@@ -1313,3 +1313,10 @@
 
 /* Nota de dificuldade fixa (CD) na rolagem de ação */
 .lig-dc-note { font-size: 0.8rem; color: var(--lig-gold, #c9a84a); }
+
+/* Emanação (área/aura persistente) no editor de ação */
+.lig-emanation-box {
+  margin-top: 0.5rem; padding: 0.5rem;
+  border: 1px solid var(--lig-border, #5a4a2a); border-radius: 4px;
+  background: rgba(201, 168, 74, 0.04);
+}

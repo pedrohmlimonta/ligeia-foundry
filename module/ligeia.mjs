@@ -6,6 +6,7 @@ import { LigeiaActor } from "./documents/actor.mjs";
 import { LigeiaItem } from "./documents/item.mjs";
 import { LigeiaCombatant } from "./documents/combatant.mjs";
 import { LigeiaCharacterSheet } from "./sheets/character-sheet.mjs";
+import { registerEmanationHooks } from "./helpers/emanation.mjs";
 import {
   HabilidadeSheet,
   MagiaSheet,
@@ -268,6 +269,8 @@ Hooks.once("init", function () {
 /* ------------------------------------------------------------------ */
 Hooks.once("ready", function () {
   console.log("Ligeia RPG | Pronto");
+  // Ativa as emanações (áreas/auras persistentes com disparo por turno).
+  registerEmanationHooks();
 });
 
 /* ------------------------------------------------------------------ */

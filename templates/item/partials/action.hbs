@@ -74,6 +74,26 @@
       <input type="checkbox" name="system.actions.{{i}}.includeSelf" {{checked act.includeSelf}}/>
       {{#if (eq act.targetMode "aura")}}Exceção: incluir você também na aura{{else}}Exceção: incluir você mesmo se estiver fora da área{{/if}}
     </label>
+
+    {{!-- Emanação: área/aura persistente com disparo por turno --}}
+    <div class="lig-emanation-box">
+      <label class="lig-inline-check">
+        <input type="checkbox" name="system.actions.{{i}}.persistArea" {{checked act.persistArea}}/>
+        <strong>Emanação contínua</strong> — a {{#if (eq act.targetMode "aura")}}aura{{else}}área{{/if}} permanece no mapa e reaplica esta ação a quem iniciar o turno dentro dela
+      </label>
+      {{#if act.persistArea}}
+      <div class="lig-item-row">
+        <label>Duração (rodadas, 0 = até fim da cena)
+          <input type="number" name="system.actions.{{i}}.persistRounds" value="{{act.persistRounds}}" min="0"/>
+        </label>
+        <label class="lig-inline-check">
+          <input type="checkbox" name="system.actions.{{i}}.persistAffectsSelf" {{checked act.persistAffectsSelf}}/>
+          Afeta também a fonte
+        </label>
+      </div>
+      <p class="lig-hint">{{#if (eq act.targetMode "aura")}}A aura segue o token de origem.{{else}}A área fica fixa no ponto escolhido.{{/if}} Requer um combate ativo para o disparo por turno.</p>
+      {{/if}}
+    </div>
     {{/if}}
 
     {{#if (or (eq act.targetMode "target") (eq act.targetMode "area") (eq act.targetMode "aura"))}}

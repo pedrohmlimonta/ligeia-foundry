@@ -55,8 +55,14 @@ export function targetTokensInCircle(cx, cy, radiusUnits) {
   }
 }
 
-/** Cria os dados base de um template circular. */
-function circleData(radius, x, y) {
+/** Cria os dados base de um template circular.
+ *  Se `persistFlags` for fornecido, a área é PERSISTENTE (emanação): não é
+ *  transitória e carrega os metadados para refazer a rolagem por turno.
+ */
+function circleData(radius, x, y, persistFlags = null) {
+  const lig = persistFlags
+    ? { transient: false, emanation: persistFlags }
+    : { transient: true };
   return {
     t: "circle",
     user: game.user.id,
@@ -65,7 +71,31 @@ function circleData(radius, x, y) {
     x: x ?? 0,
     y: y ?? 0,
     fillColor: game.user.color || "#ff0000",
-    flags: { "ligeia-rpg": { transient: true } },
+    flags: { "ligeia-rpg": lig },
+  };
+}
+
+/**
+ * Monta os metadados de emanação gravados na flag do template, usados para
+ * refazer a rolagem da ação a cada início de turno de quem está dentro.
+ */
+function buildEmanationFlags(actor, item, action) {
+  const token = actor.getActiveTokens?.(true)?.[0] || actor.getActiveTokens?.()?.[0];
+  return {
+    actorUuid: actor.uuid,
+    itemUuid: item?.uuid || null,
+    actionLabel: action.label || "",
+    // Índice da ação dentro do item (para reencontrá-la na execução por turno).
+    actionIndex: (item?.system?.actions || []).indexOf(action),
+    isAura: action.targetMode === "aura",
+    sourceTokenId: token?.id || null,
+    affectsSelf: !!action.persistAffectsSelf,
+    radius: Number(action.area) || 0,
+    // Duração: rounds>0 = N rodadas; 0 = até o fim da cena.
+    rounds: Number(action.persistRounds) || 0,
+    // Rodada do combate em que foi criada (para expiração).
+    createdRound: game.combat?.round ?? null,
+    remaining: Number(action.persistRounds) || 0,
   };
 }
 
@@ -73,17 +103,17 @@ function circleData(radius, x, y) {
  * AURA: cria um círculo centrado no token do ator (sem posicionamento).
  * @returns {MeasuredTemplateDocument|null}
  */
-export async function placeAuraTemplate(actor, radius) {
+export async function placeAuraTemplate(actor, radius, persistFlags = null) {
   const token = actor.getActiveTokens?.(true)?.[0] || actor.getActiveTokens?.()?.[0];
   if (!token) {
     ui.notifications?.warn("O personagem precisa de um token na cena para a aura.");
     return null;
   }
-  const cls = CONFIG.MeasuredTemplate.documentClass;
-  const data = circleData(radius, token.center.x, token.center.y);
-  await canvas.scene.createEmbeddedDocuments("MeasuredTemplate", [data]);
+  const data = circleData(radius, token.center.x, token.center.y, persistFlags);
+  const created = await canvas.scene.createEmbeddedDocuments("MeasuredTemplate", [data]);
   // Mira e devolve os atores dentro da aura
-  return targetTokensInCircle(token.center.x, token.center.y, radius);
+  const actors = targetTokensInCircle(token.center.x, token.center.y, radius);
+  return { actors, templateId: created?.[0]?.id || null };
 }
 
 /**
@@ -91,7 +121,7 @@ export async function placeAuraTemplate(actor, radius) {
  * criado, ou null se cancelado.
  * @returns {Promise<MeasuredTemplateDocument|null>}
  */
-export async function placeAreaTemplate(actor, radius) {
+export async function placeAreaTemplate(actor, radius, persistFlags = null) {
   const Base = MTObjectClass();
   if (!Base) return null;
 
@@ -99,7 +129,7 @@ export async function placeAreaTemplate(actor, radius) {
   // Começa perto do token do ator, se houver
   const token = actor.getActiveTokens?.(true)?.[0];
   const start = token ? { x: token.center.x, y: token.center.y } : { x: 0, y: 0 };
-  const doc = new cls(circleData(radius, start.x, start.y), { parent: canvas.scene });
+  const doc = new cls(circleData(radius, start.x, start.y, persistFlags), { parent: canvas.scene });
   const preview = new Base(doc);
 
   const initialLayer = canvas.activeLayer;
@@ -163,12 +193,12 @@ export async function placeAreaTemplate(actor, radius) {
       finalData.y = pt.y;
       cleanup();
       try {
-        await canvas.scene.createEmbeddedDocuments("MeasuredTemplate", [finalData]);
+        const created = await canvas.scene.createEmbeddedDocuments("MeasuredTemplate", [finalData]);
         const actors = targetTokensInCircle(finalData.x, finalData.y, radius);
-        resolve({ ok: true, actors });
+        resolve({ ok: true, actors, templateId: created?.[0]?.id || null });
       } catch (e) {
         console.warn("Ligeia | falha ao criar template de área:", e);
-        resolve({ ok: true, actors: [] });
+        resolve({ ok: true, actors: [], templateId: null });
       }
     };
 
@@ -194,19 +224,23 @@ export async function placeAreaTemplate(actor, radius) {
  *   proceed=false só quando o jogador cancela o posicionamento da área.
  *   actors=null quando o modo não é área/aura (use o targeting normal).
  */
-export async function placeTemplateForAction(actor, action) {
+export async function placeTemplateForAction(actor, item, action) {
   const mode = action.targetMode;
   const radius = Number(action.area) || 0;
   if (mode !== "area" && mode !== "aura") return { proceed: true, actors: null };
   if (radius <= 0) return { proceed: true, actors: null };
   if (!canvas?.scene) return { proceed: true, actors: null };
 
+  // Se a ação cria emanação persistente, monta os metadados para gravar na
+  // flag do template (usados para refazer a rolagem por turno).
+  const persistFlags = action.persistArea ? buildEmanationFlags(actor, item, action) : null;
+
   try {
     if (mode === "aura") {
-      const actors = await placeAuraTemplate(actor, radius);
-      return { proceed: true, actors: actors || [] };
+      const res = await placeAuraTemplate(actor, radius, persistFlags);
+      return { proceed: true, actors: (res?.actors) || [] };
     } else {
-      const res = await placeAreaTemplate(actor, radius);
+      const res = await placeAreaTemplate(actor, radius, persistFlags);
       return { proceed: res.ok, actors: res.actors || [] };
     }
   } catch (e) {
