@@ -508,8 +508,14 @@ async function resolveHitOnActor(action, tActor, { damageRoll, atkTotal, defTota
           endRoll: {
             enabled: !!ae.resist,
             attr: ae.resistAttr || "vigor",
+            // CD inicial: refazível > conjuração > fixa.
             dc: ae.resistVsCast ? atkTotal : (ae.resistDc || 0),
             vsCast: !!ae.resistVsCast,
+            // Modo "refazer a cada rodada": guarda o atacante e o atributo do
+            // ataque para re-rolar a CD por rodada (rolagem resistida fresca).
+            reroll: !!ae.resistReroll,
+            attackerUuid: ae.resistReroll ? (caster?.uuid || "") : "",
+            attackerAttr: ae.resistReroll ? (action.rollAttr || "forca") : "",
           },
           tickDamage: { amount: ae.tickAmount || 0, type: ae.tickType || "", resource: ae.tickResource || "hp" },
           source: caster?.name || "",
@@ -562,19 +568,45 @@ export async function spendActionCosts(actor, action) {
 }
 
 /**
- * Executa UMA ação de um item. Trata os modos de alvo:
- *   none   — sem alvo (só rolagem/dano anunciado)
- *   self   — afeta o próprio personagem (sem defesa)
- *   target — afeta os alvos mirados (defesa se canRoll)
- *   area   — área: afeta quem está nela (inclui o próprio se ele estiver dentro)
- *   aura   — aura: afeta os outros na área, nunca o próprio (salvo includeSelf)
- *
- * @param {object} opts
- * @param {Actor} opts.actor  ator dono do item
- * @param {Item}  opts.item   item
- * @param {object} opts.action  a entrada de ação (de system.actions)
- * @param {boolean} opts.hidden  rolagem oculta
+ * Desconta os custos de um ITEM (array system.costs) do ator. Usada ao ATIVAR
+ * um item ativável. Custos válidos: mp (PM), hp (PV), hpTemp (PV temp), heroic
+ * (PH). Retorna um texto para o chat e um flag de recurso insuficiente.
+ * @returns {{text:string, insufficient:boolean, spent:boolean}}
  */
+export async function spendItemCosts(actor, item) {
+  const costs = (item.system?.costs || []).filter((c) => (Number(c.value) || 0) > 0);
+  if (!costs.length) return { text: "", insufficient: false, spent: false };
+  if (!actor?.isOwner) {
+    return { text: costs.map((c) => `${c.value} ${resLabel(c.resource)}`).join(", "), insufficient: false, spent: false };
+  }
+
+  const update = {};
+  const parts = [];
+  let insufficient = false;
+  for (const c of costs) {
+    const val = Number(c.value) || 0;
+    if (c.resource === "hpTemp") {
+      const cur = actor.system?.resources?.hp?.temp || 0;
+      if (cur < val) insufficient = true;
+      update["system.resources.hp.temp"] = Math.max(0, cur - val);
+    } else {
+      const res = actor.system?.resources?.[c.resource];
+      if (!res) continue;
+      const cur = res.value || 0;
+      if (cur < val) insufficient = true;
+      update[`system.resources.${c.resource}.value`] = Math.max(0, cur - val);
+    }
+    parts.push(`${val} ${resLabel(c.resource)}`);
+  }
+  if (Object.keys(update).length) await actor.update(update);
+  return { text: parts.join(", "), insufficient, spent: true };
+}
+
+/** Rótulo curto de um recurso de custo. */
+function resLabel(resource) {
+  return { mp: "PM", hp: "PV", hpTemp: "PV temp.", heroic: "PH" }[resource] || resource;
+}
+
 /**
  * Executa a macro vinculada a uma ação, se houver UUID e estiver ativa.
  * A macro recebe um escopo com referências úteis (actor, item, action,

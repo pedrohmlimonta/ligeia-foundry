@@ -1,7 +1,7 @@
 /**
  * Ficha de Personagem do Ligeia — Foundry V13 (ApplicationV2).
  */
-import { rollLigeia, postRollToChat, rollItemAction, resolveAttr, rerollFor, critFor } from "../helpers/dice.mjs";
+import { rollLigeia, postRollToChat, rollItemAction, resolveAttr, rerollFor, critFor, spendItemCosts } from "../helpers/dice.mjs";
 import { rollSingleEndEffect } from "../helpers/turn-effects.mjs";
 import { placeTemplateForAction } from "../helpers/template.mjs";
 import { computeXpSpent } from "../helpers/xp.mjs";
@@ -578,7 +578,20 @@ export class LigeiaCharacterSheet extends HandlebarsApplicationMixin(ActorSheetV
     const id = target.closest("[data-item-id]")?.dataset.itemId;
     const item = this.document.items.get(id);
     if (!item) return;
+    const turningOn = !item.system.active;
     await item.update({ "system.active": !item.system.active });
+
+    // Ao LIGAR um item ativo com custos, desconta os custos obrigatórios
+    // (PV/PM/PH) automaticamente e anuncia no chat.
+    if (turningOn && item.system.mode === "active") {
+      const { text, insufficient, spent } = await spendItemCosts(this.document, item);
+      if (spent && text) {
+        await ChatMessage.create({
+          speaker: ChatMessage.getSpeaker({ actor: this.document }),
+          flavor: `<div class="ligeia-roll-flavor"><strong>${item.name}</strong> ativada — custo: ${text}${insufficient ? ' <span class="lig-insufficient">(recurso insuficiente!)</span>' : ""}</div>`,
+        });
+      }
+    }
   }
 
   /**

@@ -31,7 +31,43 @@ async function rollEndForEffect(actor, ae) {
   const rm = actor.system?.rollMods || {};
   const rr = rerollFor(actor, attrKey);
   const cr = critFor(actor, attrKey);
-  const dc = ae.endRoll?.dc || 0;
+
+  // CD do teste: normalmente fixa (endRoll.dc). No modo "refazer", o ATACANTE
+  // rola o atributo do ataque de novo para gerar a CD fresca desta rodada
+  // (rolagem resistida — ignora alcance, é só o contraste de atributos).
+  let dc = ae.endRoll?.dc || 0;
+  let atkNote = "";
+  if (ae.endRoll?.reroll && ae.endRoll?.attackerUuid) {
+    let attacker = null;
+    try { attacker = await fromUuid(ae.endRoll.attackerUuid); } catch (e) { attacker = null; }
+    // fromUuid pode devolver um token/ator; normaliza para o ator.
+    if (attacker?.actor) attacker = attacker.actor;
+    if (attacker) {
+      const aKey = ae.endRoll.attackerAttr || "forca";
+      const aR = resolveAttr(attacker, aKey);
+      const aRm = attacker.system?.rollMods || {};
+      const aRr = rerollFor(attacker, aKey, "attack");
+      const aCr = critFor(attacker, aKey, "attack");
+      const atkRoll = await rollLigeia({
+        attribute: aR.value,
+        improvement: aR.dice + (aRm.all?.dice || 0) + (aRm.attack?.dice || 0),
+        bonus: (aRm.all?.bonus || 0) + (aRm.attack?.bonus || 0),
+        reroll1: aRr.reroll1, reroll6: aRr.reroll6,
+        critBonus: aCr.critBonus, failBonus: aCr.failBonus,
+      });
+      dc = atkRoll.total;
+      const aLabel = (CONFIG.LIGEIA?.attackAttrs?.[aKey]) || aKey;
+      atkNote = ` <span class="lig-dc-note">(CD refeita: ${attacker.name} ${aLabel} → ${dc})</span>`;
+      // Mostra também os dados do atacante na mensagem.
+      await ChatMessage.create({
+        speaker: ChatMessage.getSpeaker({ actor: attacker }),
+        flavor: `<div class="ligeia-roll-flavor"><strong>${attacker.name}</strong> — mantém <em>${ae.label}</em> sobre ${actor.name} (${aLabel} → ${dc})</div>`,
+        rolls: [atkRoll.roll],
+        sound: CONFIG.sounds.dice,
+      });
+    }
+  }
+
   const result = await rollLigeia({
     attribute: r.value,
     improvement: r.dice + (rm.all?.dice || 0),
@@ -49,7 +85,7 @@ async function rollEndForEffect(actor, ae) {
     : `<span class="lig-outcome ko">Persiste</span>`;
   await ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor }),
-    flavor: `<div class="ligeia-roll-flavor"><strong>${actor.name}</strong> — encerrar <em>${ae.label}</em> (início do turno · ${label} vs CD ${dc}): ${result.total} ${note}</div>`,
+    flavor: `<div class="ligeia-roll-flavor"><strong>${actor.name}</strong> — encerrar <em>${ae.label}</em> (início do turno · ${label} vs CD ${dc}${atkNote}): ${result.total} ${note}</div>`,
     rolls: [result.roll],
     sound: CONFIG.sounds.dice,
   });

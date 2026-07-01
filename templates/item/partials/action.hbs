@@ -233,6 +233,11 @@
               <option value="percepcao" {{#if (eq fx.resistAttr "percepcao")}}selected{{/if}}>Percepção</option>
             </select>
           </label>
+          <label class="lig-inline-check" title="A cada rodada, o atacante rola o atributo do ataque de novo para gerar a CD (rolagem resistida fresca, ignora alcance).">
+            <input type="checkbox" name="system.actions.{{i}}.appliesEffects.{{fi}}.resistReroll" {{checked fx.resistReroll}}/>
+            Refazer a rolagem do atacante a cada rodada
+          </label>
+          {{#unless fx.resistReroll}}
           <label class="lig-inline-check">
             <input type="checkbox" name="system.actions.{{i}}.appliesEffects.{{fi}}.resistVsCast" {{checked fx.resistVsCast}}/>
             CD = rolagem da conjuração
@@ -242,6 +247,10 @@
             <input type="number" name="system.actions.{{i}}.appliesEffects.{{fi}}.resistDc" value="{{fx.resistDc}}" min="0"/>
           </label>
           {{/unless}}
+          {{/unless}}
+          {{#if fx.resistReroll}}
+          <p class="lig-hint">A CD será rolada pelo atacante (atributo do ataque desta ação) toda rodada em que o alvo tentar se livrar do efeito.</p>
+          {{/if}}
           {{/if}}
         </div>
         <div class="lig-item-row">

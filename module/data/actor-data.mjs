@@ -59,6 +59,12 @@ function appliedEffectsField() {
         dc: new fields.NumberField({ initial: 0, integer: true, min: 0 }),
         // Quando true, a CD veio da rolagem de conjuração de quem aplicou.
         vsCast: new fields.BooleanField({ initial: false }),
+        // Quando true, a CD é REFEITA a cada rodada: o atacante rola o atributo
+        // abaixo de novo (rolagem resistida fresca), ignorando alcance. Guarda
+        // quem é o atacante e qual atributo ele usa para o efeito.
+        reroll: new fields.BooleanField({ initial: false }),
+        attackerUuid: new fields.StringField({ blank: true, initial: "" }),
+        attackerAttr: new fields.StringField({ blank: true, initial: "" }),
       }),
       // Dano contínuo por rodada aplicado ao portador (0 = nenhum).
       tickDamage: new fields.SchemaField({

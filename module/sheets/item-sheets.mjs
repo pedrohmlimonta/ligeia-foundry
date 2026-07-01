@@ -520,7 +520,7 @@ class LigeiaItemSheetBase extends HandlebarsApplicationMixin(ItemSheetV2) {
     actions[ai].appliesEffects.push({
       label: "Efeito", fxType: "bonus", fxTarget: "all", fxValue: 0, fxAll: false,
       durationMode: "scene", durationRounds: 1,
-      resist: false, resistAttr: "vigor", resistVsCast: true, resistDc: 0,
+      resist: false, resistAttr: "vigor", resistVsCast: true, resistDc: 0, resistReroll: false,
       tickAmount: 0, tickType: "", tickResource: "hp",
     });
     await this._replaceActions(actions);

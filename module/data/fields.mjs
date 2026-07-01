@@ -63,9 +63,11 @@ export function costField() {
  */
 export function activatableFields() {
   return {
+    // Por padrão os itens são ATIVÁVEIS (precisam ser ligados para valer) e
+    // começam desligados (active=false). Use "passive" para efeitos sempre-on.
     mode: new fields.StringField({
       required: true,
-      initial: "passive",
+      initial: "active",
       choices: ["passive", "active"],
     }),
     active: new fields.BooleanField({ initial: false }),
@@ -157,6 +159,10 @@ export function actionEntryField() {
         resistAttr: new fields.StringField({ blank: true, initial: "vigor" }),
         resistVsCast: new fields.BooleanField({ initial: true }),
         resistDc: new fields.NumberField({ initial: 0, integer: true, min: 0 }),
+        // Quando true, a CD do teste de resistência é REFEITA a cada rodada:
+        // o atacante rola o atributo do ataque de novo (rolagem resistida
+        // fresca, ignorando alcance) para gerar a nova CD.
+        resistReroll: new fields.BooleanField({ initial: false }),
         // Dano contínuo por rodada (0 = nenhum) — ex.: Corrosão
         tickAmount: new fields.NumberField({ initial: 0, integer: true, min: 0 }),
         tickType: new fields.StringField({ blank: true, initial: "" }),
