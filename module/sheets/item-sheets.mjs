@@ -37,9 +37,11 @@ class LigeiaItemSheetBase extends HandlebarsApplicationMixin(ItemSheetV2) {
       removeMacro: LigeiaItemSheetBase._onRemoveMacro,
       toggleMacro: LigeiaItemSheetBase._onToggleMacro,
       openMacro: LigeiaItemSheetBase._onOpenMacro,
-      captureAA: LigeiaItemSheetBase._onCaptureAA,
-      clearAA: LigeiaItemSheetBase._onClearAA,
-      toggleAA: LigeiaItemSheetBase._onToggleAA,
+      openAnimDb: LigeiaItemSheetBase._onOpenAnimDb,
+      testAnim: LigeiaItemSheetBase._onTestAnim,
+      pullAnim: LigeiaItemSheetBase._onPullAnim,
+      clearAnim: LigeiaItemSheetBase._onClearAnim,
+      toggleAnim: LigeiaItemSheetBase._onToggleAnim,
     },
   };
 
@@ -259,10 +261,17 @@ class LigeiaItemSheetBase extends HandlebarsApplicationMixin(ItemSheetV2) {
 
     // Ações do item (lista). Cada efeito aplicado recebe targetChoices conforme seu tipo.
     const aaActive = !!game.modules.get("autoanimations")?.active;
+    const seqActive = !!game.modules.get("sequencer")?.active;
     context.aaActive = aaActive;
+    context.seqActive = seqActive;
+    context.animPlacements = {
+      cast: "No conjurador",
+      target: "No alvo",
+      ranged: "Projétil (origem → alvo)",
+    };
     context.actions = (item.system?.actions || []).map((a) => ({
       ...a,
-      // Tem animação própria capturada? (config não-vazia)
+      // Tem animação PUXADA do item? (cópia não-vazia)
       hasAnim: !!(a.aaConfig && typeof a.aaConfig === "object" && Object.keys(a.aaConfig).length > 0),
       appliesEffects: (a.appliesEffects || []).map((fx) => ({
         ...fx,
@@ -488,6 +497,7 @@ class LigeiaItemSheetBase extends HandlebarsApplicationMixin(ItemSheetV2) {
       appliesEffects: [], range: 0, area: 0, costMp: 0, costHp: 0, costHeroic: 0,
       persistArea: false, persistRounds: 1, persistAffectsSelf: false,
       persistRerollAttack: false, persistTrigger: "both",
+      animFile: "", animPlacement: "target", animScale: 1, animEnabled: true,
     });
   }
   static async _onRemoveAction(event, target) {
@@ -549,10 +559,35 @@ class LigeiaItemSheetBase extends HandlebarsApplicationMixin(ItemSheetV2) {
     else ui.notifications?.warn("Macro não encontrada (foi removida?).");
   }
 
-  /* ---- Animação por ação (Automated Animations) ---- */
-  // Captura a config de animação ATUAL do item (definida no menu do Automated
-  // Animations) e a guarda nesta ação, para ela ter animação própria.
-  static async _onCaptureAA(event, target) {
+  /* ---- Animação por ação (Sequencer) ---- */
+  // Abre o visualizador da base de efeitos do Sequencer (para achar caminhos).
+  static async _onOpenAnimDb() {
+    const { openSequencerDatabase } = await import("../helpers/integrations.mjs");
+    openSequencerDatabase();
+  }
+  // Toca a animação da ação uma vez (pré-visualização), usando o token
+  // selecionado como origem e os alvos atuais.
+  static async _onTestAnim(event, target) {
+    const ai = Number(target.dataset.actionIndex);
+    const action = this.document.system.actions?.[ai];
+    if (!action?.animFile) {
+      ui.notifications?.warn("Defina um efeito de animação primeiro.");
+      return;
+    }
+    const actor = this.document.actor || canvas.tokens?.controlled?.[0]?.actor;
+    if (!actor) {
+      ui.notifications?.warn("Selecione um token na cena para testar a animação.");
+      return;
+    }
+    const { playSequencerAnimation } = await import("../helpers/integrations.mjs");
+    const targets = Array.from(game.user?.targets ?? []).map((t) => t.actor).filter(Boolean);
+    playSequencerAnimation({ actor, action, targetActors: targets });
+  }
+
+  /* ---- Puxar a animação do item (Automated Animations) para a ação ---- */
+  // Guarda uma CÓPIA da config atual do item nesta ação. Mudar a animação do
+  // item depois NÃO afeta a cópia já puxada (é um instantâneo).
+  static async _onPullAnim(event, target) {
     const ai = Number(target.dataset.actionIndex);
     if (!game.modules.get("autoanimations")?.active) {
       ui.notifications?.warn("O módulo Automated Animations não está ativo.");
@@ -561,7 +596,7 @@ class LigeiaItemSheetBase extends HandlebarsApplicationMixin(ItemSheetV2) {
     const cfg = foundry.utils.deepClone(this.document.flags?.autoanimations ?? null);
     const hasCfg = cfg && typeof cfg === "object" && Object.keys(cfg).length > 0;
     if (!hasCfg) {
-      ui.notifications?.warn("O item ainda não tem animação configurada no Automated Animations. Configure-a primeiro (no menu do módulo, na ficha do item) e depois capture.");
+      ui.notifications?.warn("O item ainda não tem animação. Configure-a no menu do Automated Animations (na ficha do item) e depois puxe.");
       return;
     }
     const actions = foundry.utils.deepClone(this.document.system.actions || []);
@@ -570,9 +605,9 @@ class LigeiaItemSheetBase extends HandlebarsApplicationMixin(ItemSheetV2) {
     actions[ai].aaName = this.document.name;
     actions[ai].aaEnabled = true;
     await this._replaceActions(actions);
-    ui.notifications?.info("Animação capturada para esta ação.");
+    ui.notifications?.info("Animação do item copiada para esta ação.");
   }
-  static async _onClearAA(event, target) {
+  static async _onClearAnim(event, target) {
     const ai = Number(target.dataset.actionIndex);
     const actions = foundry.utils.deepClone(this.document.system.actions || []);
     if (!actions[ai]) return;
@@ -580,7 +615,7 @@ class LigeiaItemSheetBase extends HandlebarsApplicationMixin(ItemSheetV2) {
     actions[ai].aaName = "";
     await this._replaceActions(actions);
   }
-  static async _onToggleAA(event, target) {
+  static async _onToggleAnim(event, target) {
     const ai = Number(target.dataset.actionIndex);
     const actions = foundry.utils.deepClone(this.document.system.actions || []);
     if (!actions[ai]) return;

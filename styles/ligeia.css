@@ -1323,3 +1323,8 @@
 
 /* Tag de emanação no chat */
 .lig-emanation-tag { color: var(--lig-gold, #c9a84a); font-style: italic; }
+
+/* Seção avançada de animação (caminho Sequencer) */
+.lig-anim-advanced { margin-top: 0.4rem; }
+.lig-anim-advanced > summary { cursor: pointer; font-size: 0.8rem; color: var(--lig-muted, #9a8a6a); padding: 0.2rem 0; }
+.lig-anim-advanced[open] > summary { color: var(--lig-gold, #c9a84a); }

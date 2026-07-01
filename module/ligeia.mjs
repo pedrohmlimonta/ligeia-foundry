@@ -7,6 +7,7 @@ import { LigeiaItem } from "./documents/item.mjs";
 import { LigeiaCombatant } from "./documents/combatant.mjs";
 import { LigeiaCharacterSheet } from "./sheets/character-sheet.mjs";
 import { registerEmanationHooks } from "./helpers/emanation.mjs";
+import { registerTurnEffectHooks } from "./helpers/turn-effects.mjs";
 import {
   HabilidadeSheet,
   MagiaSheet,
@@ -271,6 +272,8 @@ Hooks.once("ready", function () {
   console.log("Ligeia RPG | Pronto");
   // Ativa as emanações (áreas/auras persistentes com disparo por turno).
   registerEmanationHooks();
+  // Rolagens automáticas de fim de efeito no início do turno.
+  registerTurnEffectHooks();
 });
 
 /* ------------------------------------------------------------------ */

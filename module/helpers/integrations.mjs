@@ -20,19 +20,103 @@ function activeTokenOf(actor) {
   return actor.getActiveTokens(true)?.[0] || actor.getActiveTokens()?.[0] || null;
 }
 
+/** O módulo Sequencer está instalado e ativo? */
+export function isSequencerActive() {
+  return !!game.modules.get("sequencer")?.active && !!globalThis.Sequence;
+}
+
+/** Abre o visualizador da base de efeitos do Sequencer (para procurar caminhos). */
+export function openSequencerDatabase() {
+  try {
+    if (globalThis.Sequencer?.DatabaseViewer?.show) {
+      globalThis.Sequencer.DatabaseViewer.show();
+    } else {
+      ui.notifications?.warn("Sequencer não está disponível para abrir a base de efeitos.");
+    }
+  } catch (e) {
+    console.warn("Ligeia | erro ao abrir a base do Sequencer:", e);
+  }
+}
+
 /**
- * Dispara a animação do Automated Animations para uma ação.
+ * Toca a animação PRÓPRIA de uma ação via Sequencer, de forma independente
+ * das outras ações do mesmo item.
  *
- * @param {object}  opts
- * @param {Actor}   opts.actor          ator que executa a ação (origem)
- * @param {Item}    opts.item           item da ação (config geral / fallback)
- * @param {object}  [opts.action]       a ação (pode ter animação própria)
- * @param {Actor[]} [opts.targetActors] atores-alvo da ação
- *
- * Se a ação tiver animação PRÓPRIA capturada (action.aaConfig) e estiver
- * habilitada, montamos um clone do item com essa config na flag
- * `flags.autoanimations` e entregamos ao módulo — assim cada ação pode ter
- * sua animação independente. Sem isso, usa a animação geral do item.
+ * @returns {boolean} true se tocou (ou tentou tocar) algo; false se não havia
+ *   animação configurada ou o Sequencer não está disponível (para permitir
+ *   fallback para a animação geral do item via Automated Animations).
+ */
+export function playSequencerAnimation({ actor, action, targetActors = [] } = {}) {
+  try {
+    if (!action) return false;
+    const file = (action.animFile || "").trim();
+    if (!file || action.animEnabled === false) return false;
+    if (!isSequencerActive()) {
+      ui.notifications?.warn("Esta ação tem animação, mas o módulo Sequencer não está ativo.");
+      return false;
+    }
+    const sourceToken = activeTokenOf(actor);
+    if (!sourceToken) return false;
+
+    const targets = [];
+    for (const ta of targetActors) {
+      const tk = activeTokenOf(ta);
+      if (tk && tk !== sourceToken) targets.push(tk);
+    }
+
+    const placement = action.animPlacement || "target";
+    const scale = Number(action.animScale) || 1;
+    const seq = new globalThis.Sequence();
+
+    if (placement === "cast" || targets.length === 0) {
+      // No conjurador (ou sem alvos, toca na origem).
+      seq.effect().file(file).atLocation(sourceToken).scale(scale);
+    } else if (placement === "ranged") {
+      // Projétil do conjurador até cada alvo.
+      for (const t of targets) {
+        seq.effect().file(file).atLocation(sourceToken).stretchTo(t).scale(scale);
+      }
+    } else {
+      // "target": toca sobre cada alvo.
+      for (const t of targets) {
+        seq.effect().file(file).atLocation(t).scale(scale);
+      }
+    }
+    seq.play();
+    return true;
+  } catch (e) {
+    console.warn("Ligeia | falha ao tocar animação (Sequencer):", e);
+    return false;
+  }
+}
+
+/**
+ * Dispara a animação de uma ação. Prioriza a animação PRÓPRIA da ação (via
+ * Sequencer); se a ação não tiver uma, cai para a animação geral do item via
+ * Automated Animations.
+ */
+export async function playActionAnimation({ actor, item, action = null, targetActors = [] } = {}) {
+  // 1) Animação PUXADA do item para a ação (cópia visual, sem digitar).
+  const cfg = action?.aaConfig;
+  const hasPulled =
+    action?.aaEnabled !== false &&
+    cfg && typeof cfg === "object" && Object.keys(cfg).length > 0;
+  if (hasPulled) {
+    await playAutomatedAnimation({ actor, item, action, targetActors });
+    return;
+  }
+  // 2) Animação própria da ação por caminho (Sequencer, avançado).
+  const played = playSequencerAnimation({ actor, action, targetActors });
+  if (played) return;
+  // 3) Fallback: animação geral do item (Automated Animations).
+  await playAutomatedAnimation({ actor, item, action: null, targetActors });
+}
+
+/**
+ * Dispara a animação geral do item via Automated Animations. Se a ação tiver
+ * animação própria capturada (legado, action.aaConfig) e habilitada, monta um
+ * clone do item com essa config na flag `flags.autoanimations`. Sem isso, usa
+ * a animação configurada no próprio item.
  */
 export async function playAutomatedAnimation({ actor, item, action = null, targetActors = [] } = {}) {
   try {

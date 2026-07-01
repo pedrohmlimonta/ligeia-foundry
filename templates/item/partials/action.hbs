@@ -282,22 +282,51 @@
       {{/if}}
     </div>
 
-    {{#if ../aaActive}}
     <div class="lig-aa-section">
-      <div class="lig-subtitle">Animação própria (Automated Animations)</div>
+      <div class="lig-subtitle">Animação da ação</div>
+
+      {{#if ../aaActive}}
       {{#if act.hasAnim}}
       <div class="lig-macro-bound {{#unless act.aaEnabled}}off{{/unless}}">
-        <button type="button" class="lig-mini-btn" data-action="toggleAA" data-action-index="{{i}}" title="Ativar/desativar">{{#if act.aaEnabled}}●{{else}}○{{/if}}</button>
-        <span class="lig-macro-name">🎞️ Animação própria capturada</span>
-        <button type="button" class="lig-mini-btn" data-action="captureAA" data-action-index="{{i}}" title="Recapturar do item">⟳</button>
-        <button type="button" class="lig-mini-btn danger" data-action="clearAA" data-action-index="{{i}}" title="Remover animação desta ação">✕</button>
+        <button type="button" class="lig-mini-btn" data-action="toggleAnim" data-action-index="{{i}}" title="Ativar/desativar">{{#if act.aaEnabled}}●{{else}}○{{/if}}</button>
+        <span class="lig-macro-name">🎞️ Animação copiada do item</span>
+        <button type="button" class="lig-mini-btn" data-action="pullAnim" data-action-index="{{i}}" title="Atualizar: copiar de novo a animação atual do item">↻</button>
+        <button type="button" class="lig-mini-btn danger" data-action="clearAnim" data-action-index="{{i}}" title="Remover a animação desta ação">✕</button>
       </div>
+      <p class="lig-hint">Esta ação tem uma <strong>cópia</strong> da animação do item. Mudar a animação do item depois não afeta esta cópia. Use ↻ para atualizar de propósito.</p>
       {{else}}
-      <button type="button" class="lig-mini-btn" data-action="captureAA" data-action-index="{{i}}">Capturar animação do item para esta ação</button>
+      <button type="button" class="lig-mini-btn" data-action="pullAnim" data-action-index="{{i}}">🎞️ Puxar animação do item para esta ação</button>
+      <p class="lig-hint">Configure a animação visualmente no menu do <strong>Automated Animations</strong> (na ficha do item) e clique em Puxar — a ação guarda uma cópia própria. Assim você não precisa digitar nada, e cada ação pode ter uma animação diferente (configure o item, puxe para a ação; reconfigure o item, puxe para a outra ação).</p>
       {{/if}}
-      <p class="lig-hint">Configure a animação no menu do Automated Animations (na ficha do item) e clique em capturar para esta ação tê-la de forma independente. Sem captura, a ação usa a animação geral do item.</p>
+      {{/if}}
+
+      {{!-- Alternativa avançada: caminho do efeito (Sequencer) --}}
+      <details class="lig-anim-advanced" {{#if act.animFile}}open{{/if}}>
+        <summary>Avançado: caminho do efeito (Sequencer)</summary>
+        <div class="lig-item-row">
+          <label style="flex:2">Efeito (caminho do Sequencer ou URL)
+            <input type="text" name="system.actions.{{i}}.animFile" value="{{act.animFile}}" placeholder="ex.: jb2a.fireball.explosion.orange"/>
+          </label>
+          <label>Onde
+            <select name="system.actions.{{i}}.animPlacement">{{selectOptions ../animPlacements selected=act.animPlacement}}</select>
+          </label>
+        </div>
+        <div class="lig-item-row">
+          <label>Escala
+            <input type="number" name="system.actions.{{i}}.animScale" value="{{act.animScale}}" min="0.1" step="0.1"/>
+          </label>
+          <label class="lig-inline-check">
+            <input type="checkbox" name="system.actions.{{i}}.animEnabled" {{checked act.animEnabled}}/>
+            Ativa
+          </label>
+          {{#if ../seqActive}}
+          <button type="button" class="lig-mini-btn" data-action="openAnimDb" title="Procurar efeitos disponíveis">🔎 Procurar</button>
+          <button type="button" class="lig-mini-btn" data-action="testAnim" data-action-index="{{i}}" title="Testar com o token selecionado e os alvos atuais">▶ Testar</button>
+          {{/if}}
+        </div>
+        <p class="lig-hint">Opção para quem quer digitar o caminho direto. Se a animação foi puxada do item (acima), ela tem prioridade sobre este campo.</p>
+      </details>
     </div>
-    {{/if}}
   </div>
   {{/each}}
   {{#unless actions.length}}

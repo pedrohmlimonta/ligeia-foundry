@@ -2,6 +2,7 @@
  * Ficha de Personagem do Ligeia — Foundry V13 (ApplicationV2).
  */
 import { rollLigeia, postRollToChat, rollItemAction, resolveAttr, rerollFor, critFor } from "../helpers/dice.mjs";
+import { rollSingleEndEffect } from "../helpers/turn-effects.mjs";
 import { placeTemplateForAction } from "../helpers/template.mjs";
 import { computeXpSpent } from "../helpers/xp.mjs";
 import { effectIsActive } from "../helpers/effects.mjs";
@@ -532,43 +533,11 @@ export class LigeiaCharacterSheet extends HandlebarsApplicationMixin(ActorSheetV
   /** Rola para tentar encerrar um efeito (sucesso ≥ CD remove o efeito). */
   static async #onRollEndEffect(event, target) {
     const idx = Number(target.dataset.index);
-    const arr = foundry.utils.deepClone(this.document.system.appliedEffects || []);
-    const ae = arr[idx];
-    if (!ae || !ae.endRoll?.enabled) return;
-    const attrKey = ae.endRoll.attr || "mente";
-    const r = resolveAttr(this.document, attrKey);
-    const rm = this.document.system?.rollMods || {};
-    const rr = rerollFor(this.document, attrKey);
-    const cr = critFor(this.document, attrKey);
-    const dc = ae.endRoll.dc || 0;
-    const result = await rollLigeia({
-      attribute: r.value,
-      improvement: r.dice + (rm.all?.dice || 0),
-      bonus: rm.all?.bonus || 0,
-      difficulty: dc,
-      reroll1: rr.reroll1,
-      reroll6: rr.reroll6,
-      critBonus: cr.critBonus,
-      failBonus: cr.failBonus,
-    });
-    const success = result.total >= dc;
-    const label = (CONFIG.LIGEIA?.attackAttrs?.[attrKey]) || attrKey;
-    const note = success ? `<span class="lig-outcome ok">Encerrou!</span>` : `<span class="lig-outcome ko">Persiste</span>`;
-    await ChatMessage.create({
-      speaker: ChatMessage.getSpeaker({ actor: this.document }),
-      flavor: `<div class="ligeia-roll-flavor"><strong>${this.document.name}</strong> — encerrar <em>${ae.label}</em> (${label} vs CD ${dc}): ${result.total} ${note}</div>`,
-      rolls: [result.roll],
-      sound: CONFIG.sounds.dice,
-    });
-    if (success) {
-      arr.splice(idx, 1);
-      const upd = { "system.appliedEffects": arr };
-      if (ae.conditionId) {
-        upd["system.conditions"] = (this.document.system.conditions || []).filter((c) => c !== ae.conditionId);
-      }
-      this.#fxOpInProgress = true;
-      try { await this.document.update(upd); }
-      finally { this.#fxOpInProgress = false; }
+    this.#fxOpInProgress = true;
+    try {
+      await rollSingleEndEffect(this.document, idx);
+    } finally {
+      this.#fxOpInProgress = false;
     }
   }
 

@@ -33,7 +33,7 @@ async function waitForDiceAnimation(fallbackMs = 1100) {
 }
 
 import { conditionModifiers } from "./conditions.mjs";
-import { playAutomatedAnimation } from "./integrations.mjs";
+import { playActionAnimation } from "./integrations.mjs";
 
 /**
  * Executa uma rolagem do Ligeia e devolve um objeto Roll do Foundry
@@ -738,10 +738,9 @@ export async function rollItemAction({ actor, item, action, hidden = false, over
   }
   // mode "none": nenhum alvo
 
-  // Integração com Automated Animations: dispara a animação configurada para
-  // o item (se o módulo estiver instalado e o item configurado nele). Não
-  // bloqueia o resto da resolução (fire-and-forget).
-  playAutomatedAnimation({
+  // Integração de animação: prioriza a animação PRÓPRIA da ação (Sequencer);
+  // se não houver, usa a animação geral do item (Automated Animations).
+  playActionAnimation({
     actor,
     item,
     action,
