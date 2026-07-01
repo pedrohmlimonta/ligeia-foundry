@@ -612,6 +612,42 @@ async function executeActionMacro({ actor, item, action, overrideTargets = null 
   }
 }
 
+/**
+ * Mede a distância (nas unidades da cena — metros, no sistema) entre dois
+ * tokens (placeables), de centro a centro. Usa a medição do grid do Foundry
+ * (respeita tipo de grade e regra de diagonal); cai para euclidiana se
+ * necessário.
+ * @returns {number|null} distância em metros, ou null se não der para medir.
+ */
+function measureTokenDistance(tokenA, tokenB) {
+  if (!tokenA || !tokenB) return null;
+  const a = tokenA.center || { x: tokenA.x, y: tokenA.y };
+  const b = tokenB.center || { x: tokenB.x, y: tokenB.y };
+  try {
+    const grid = canvas?.grid;
+    if (grid?.measurePath) {
+      const r = grid.measurePath([a, b]);
+      if (Number.isFinite(r?.distance)) return r.distance;
+    }
+    if (grid?.measureDistance) {
+      const d = grid.measureDistance(a, b, { gridSpaces: true });
+      if (Number.isFinite(d)) return d;
+    }
+  } catch (e) {
+    /* cai para o euclidiano */
+  }
+  const grid = canvas?.grid;
+  if (!grid?.size) return null;
+  const px = Math.hypot(a.x - b.x, a.y - b.y);
+  return (px / grid.size) * (grid.distance || 1);
+}
+
+/** Token (placeable) ativo de um ator na cena atual. */
+function activeTokenOfActor(actor) {
+  if (!actor?.getActiveTokens) return null;
+  return actor.getActiveTokens(true)?.[0] || actor.getActiveTokens()?.[0] || null;
+}
+
 export async function rollItemAction({ actor, item, action, hidden = false, overrideTargets = null, frozenAttackTotal = null }) {
   const cfg = CONFIG.LIGEIA || {};
   // Compatibilidade: se nenhuma ação for passada, usa a primeira do item.
@@ -738,6 +774,34 @@ export async function rollItemAction({ actor, item, action, hidden = false, over
   }
   // mode "none": nenhum alvo
 
+  // ---- Checagem de ALCANCE (modo alvo direto) ----
+  // Se a ação tem alcance definido (>0), mede a distância do token de origem
+  // até cada alvo. Alvos além do alcance são marcados como fora de alcance
+  // (não são atingidos) e geram um aviso. Só se aplica ao modo "target" —
+  // em área/aura os alvos já vêm de dentro do template.
+  const rangeM = Number(action.range) || 0;
+  const rangeOutMsgs = [];
+  if (rangeM > 0 && mode === "target") {
+    const srcToken = activeTokenOfActor(actor);
+    if (srcToken) {
+      for (const entry of affected) {
+        if (entry.isSelf) continue;
+        const tgtToken = activeTokenOfActor(entry.actor);
+        const dist = measureTokenDistance(srcToken, tgtToken);
+        if (dist == null) continue; // sem como medir; não bloqueia
+        entry.dist = dist;
+        if (dist > rangeM + 1e-6) {
+          entry.outOfRange = true;
+          const d = Math.round(dist * 10) / 10;
+          rangeOutMsgs.push(`${entry.actor.name}: ${d}m (máx. ${rangeM}m)`);
+        }
+      }
+    }
+  }
+  if (rangeOutMsgs.length) {
+    ui.notifications?.warn(`Fora de alcance — ${rangeOutMsgs.join("; ")}. Alcance máximo: ${rangeM}m.`);
+  }
+
   // Integração de animação: prioriza a animação PRÓPRIA da ação (Sequencer);
   // se não houver, usa a animação geral do item (Automated Animations).
   playActionAnimation({
@@ -791,7 +855,13 @@ export async function rollItemAction({ actor, item, action, hidden = false, over
 
   // ---- Resolve cada alvo afetado ----
   if (affected.length) {
-    for (const { actor: tActor, isSelf } of affected) {
+    for (const { actor: tActor, isSelf, outOfRange, dist } of affected) {
+      // Alvo fora de alcance: não é atingido; mostra uma linha informativa.
+      if (outOfRange) {
+        const d = Math.round((dist || 0) * 10) / 10;
+        lines.push(`<div class="lig-target-line lig-out-range"><span class="lig-tgt-name">${tActor.name}</span> <span class="lig-outcome ko">Fora de alcance (${d}m > ${rangeM}m)</span></div>`);
+        continue;
+      }
       // Há defesa quando: a ação faz ATAQUE E o modo é target/area/aura E não é o self.
       const needsDefense = action.canRoll && !isSelf && (mode === "target" || mode === "area" || mode === "aura");
 
